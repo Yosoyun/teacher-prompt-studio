@@ -5,6 +5,8 @@ review-ready prompt for any AI tool. It includes 79 searchable workflows across
 planning, teaching, assessment, resources, learner support, feedback,
 communication, and professional practice.
 
+Live site: https://yosoyun.github.io/teacher-prompt-studio/
+
 The adaptive compiler now offers Precision, Expert, and Breakthrough modes. It
 builds an instruction hierarchy, aligns goals to evidence, applies
 workflow-specific methods, isolates pasted material as untrusted reference
@@ -48,6 +50,7 @@ workflow coverage.
 
 ## Deployment
 
-The project uses the bundled vinext and Cloudflare Sites structure. Deployment
-metadata lives in `.openai/hosting.json`; there are no database, upload, login,
-or server-side persistence requirements.
+The public site is deployed automatically to GitHub Pages from
+`.github/workflows/deploy-pages.yml`. The project also retains the bundled
+vinext and Cloudflare Sites structure; there are no database, upload, login, or
+server-side persistence requirements.

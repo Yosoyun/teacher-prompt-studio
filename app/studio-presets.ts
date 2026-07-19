@@ -47,7 +47,7 @@ export const STUDIO_RECIPES: StudioRecipe[] = [
     objective:
       "Create a fair, classroom-ready question paper that matches the selected class, board, topic, difficulty and time limit.",
     details:
-      "Use a balanced mix of objective, short-answer, application and higher-order questions. Keep instructions unambiguous and verify every total.",
+      "Use the exact one-tap paper architecture selected by the teacher; never invent or approximate the item mix. Build the complete key alongside the questions, keep instructions unambiguous and verify every total.",
     addOns: ["answers", "rubric", "misconceptions", "integrity", "sources"],
     outputs: ["Assessment blueprint", "Student paper", "Answer key", "Marking scheme", "Quality audit"],
     timeSaved: "2–4 hours",

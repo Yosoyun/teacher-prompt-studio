@@ -41,7 +41,7 @@ test("server-renders the teacher prompt studio", async () => {
 });
 
 test("keeps the prompt library broad and the old logic defects removed", async () => {
-  const [data, engine, page, layout, presets, artifacts, stage] = await Promise.all([
+  const [data, engine, page, layout, presets, artifacts, stage, preflight, styles] = await Promise.all([
     readFile(new URL("../app/prompt-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/prompt-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/PromptStudio.tsx", import.meta.url), "utf8"),
@@ -49,6 +49,8 @@ test("keeps the prompt library broad and the old logic defects removed", async (
     readFile(new URL("../app/studio-presets.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/artifact-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/ArtifactStage.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/artifact-preflight.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   const workflowCount = (data.match(/workflow\(\{/g) ?? []).length;
@@ -94,6 +96,21 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(engine, /MANDATORY FILE DELIVERY/);
   assert.match(engine, /Required attached files/);
   assert.doesNotMatch(engine, /`Required formats:/);
+  assert.match(engine, /FILE FIREWALL — PHYSICAL AUDIENCE SEPARATION/);
+  assert.match(engine, /requiresPhysicalAudienceSeparation/);
+  assert.match(engine, /effectiveArtifactFiles/);
+  assert.match(engine, /effectivePortableFallback/);
+  assert.match(engine, /compilePreflightGateLines\(input\.artifact, input\.outputLanguage, isAssessment, artifactFiles\)/);
+  assert.match(engine, /Never merge learner and teacher content into one fallback file/);
+  assert.doesNotMatch(engine, /Portable fallback: \$\{input\.artifact\.fallback\}/);
+  assert.match(engine, /artifactManifest: artifactFiles/);
+  assert.doesNotMatch(engine, /input\.artifact\.id === "worksheet-bundle"/);
+  assert.match(engine, /ASSESSMENT BLUEPRINT — EXACT, NOT APPROXIMATE/);
+  assert.match(engine, /ACADEMIC PUBLICATION STANDARD/);
+  assert.match(engine, /LANGUAGE, FONT AND EXPORT PRODUCTION/);
+  assert.match(engine, /STRICT ARTIFACT RELEASE GATE — PASS \/ FAIL \/ NOT_RUN/);
+  assert.match(engine, /Never title or deliver one document as ‘Teacher Version \+ Student Version’/);
+  assert.match(engine, /Keep the derivation and any assumption in teacher-only planning content/);
   assert.match(engine, /Do not satisfy this mission with ordinary chat prose/);
   assert.match(engine, /topic-substitution test/i);
   assert.match(engine, /PROVENANCE METADATA/);
@@ -110,6 +127,15 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(page, /FOLLOW_UP_PATHS/);
   assert.match(page, /artifact\.actionLabel/);
   assert.match(page, /AI_PROVIDERS/);
+  assert.match(page, /ASSESSMENT_PROFILES/);
+  assert.match(page, /STRUCTURED_ITEM_WORKFLOW_IDS/);
+  assert.match(page, /"quiz-test"/);
+  assert.match(page, /"competitive-exam"/);
+  assert.doesNotMatch(page, /selectedWorkflow\.flags\?\.includes\("assessment"\) \|\| artifactId === "worksheet-bundle"/);
+  assert.match(page, /buildAssessmentSpec/);
+  assert.match(page, /EXACTLY \$\{assessmentSpec\.totalItems\} items/);
+  assert.match(page, /Exact item and mark totals are calculated automatically/);
+  assert.doesNotMatch(page, /approximately \$\{questionCount\}/);
   assert.match(page, /expertDetailsRef\.current\.open = true/);
   assert.match(page, /textarea\.value = text/);
   assert.match(page, /aria-label="Thinking demand"/);
@@ -153,10 +179,47 @@ test("keeps the prompt library broad and the old logic defects removed", async (
     assert.match(artifacts, new RegExp(`id: "${artifact}"`));
   }
   assert.match(artifacts, /CREATOR_SIGNATURE = "Indrajeet Yadav"/);
+  assert.match(artifacts, /filename: "student-paper\.pdf"/);
+  assert.match(artifacts, /filename: "student-paper-editable\.docx"/);
+  assert.match(artifacts, /filename: "teacher-assessment-pack\.pdf"/);
+  assert.match(artifacts, /separate downloadable self-contained student-paper, editable-student-master and teacher-pack HTML files/);
+  assert.match(artifacts, /mustExclude: \["answers or hints"/);
+  assert.match(artifacts, /id: "academic-editorial"/);
+  assert.match(artifacts, /id: "technical-institute"/);
+  assert.match(artifacts, /id: "balanced-academic"/);
+  assert.match(artifacts, /id: "application-rich"/);
+  assert.match(artifacts, /id: "rapid-diagnostic"/);
   assert.match(artifacts, /Return the fully runnable self-contained HTML simulation file/);
   assert.match(stage, /Interactive flowchart blueprint preview/);
   assert.match(stage, /Interactive simulation blueprint preview/);
+  assert.match(stage, /Teacher assessment pack/);
+  assert.match(stage, /Placeholders 0/);
   assert.match(stage, /useState/);
+  for (const gate of [
+    "G01_MANIFEST",
+    "G03_PLACEHOLDERS",
+    "G04_META_LEAKAGE",
+    "G05_AUDIENCE_FIREWALL",
+    "G07_VISUAL_RENDER",
+    "G09_PROFESSIONAL_LAYOUT",
+    "G12_DELIVERY_EVIDENCE",
+    "G13_ASSESSMENT_VALIDITY",
+    "G14_MULTILINGUAL_RENDER",
+    "F01_PDF",
+    "F02_DOCX",
+  ]) {
+    assert.match(preflight, new RegExp(`id: "${gate}"`));
+  }
+  assert.match(preflight, /NOT_RUN is a failure/);
+  assert.match(preflight, /Noto Sans Devanagari/);
+  assert.match(preflight, /Noto Sans Bengali/);
+  assert.match(preflight, /Noto Sans Tamil/);
+  assert.match(preflight, /U\+FFFD/);
+  assert.match(preflight, /tofu boxes/);
+  assert.match(preflight, /placeholder scan count must equal zero/);
+  assert.match(styles, /\.style-academic-editorial/);
+  assert.match(styles, /\.style-technical-institute/);
+  assert.match(styles, /\.assessment-profile-buttons/);
   assert.match(layout, /Create real teaching artifacts/);
   assert.match(layout, /og-beast\.png/);
   assert.doesNotMatch(page, /download.*teacher-prompt\.txt/s);

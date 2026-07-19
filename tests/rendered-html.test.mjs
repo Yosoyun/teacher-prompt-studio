@@ -30,24 +30,26 @@ test("server-renders the teacher prompt studio", async () => {
 
   const html = await response.text();
   assert.match(html, /Teacher Prompt Studio/);
-  assert.match(html, /Get a prompt that thinks ahead/);
-  assert.match(html, /Prompt workspace/);
+  assert.match(html, /AI-ready masterpiece/);
+  assert.match(html, /classroom command deck/i);
   assert.match(html, /Nothing is sent or stored/);
-  assert.match(html, /Choose the prompt intelligence/);
-  assert.match(html, /Follow-up prompt pack/);
+  assert.match(html, /Tune the intelligence/);
+  assert.match(html, /Improve the AI/);
+  assert.match(html, /Launch in your favourite AI/);
   assert.match(html, /INSTRUCTION PRIORITY/);
   assert.match(html, /EXECUTION PROTOCOL/);
   assert.match(html, /QUALITY GATES/);
-  assert.match(html, /Audit &amp; repair/);
+  assert.match(html, /Question paper/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
 test("keeps the prompt library broad and the old logic defects removed", async () => {
-  const [data, engine, page, layout] = await Promise.all([
+  const [data, engine, page, layout, presets] = await Promise.all([
     readFile(new URL("../app/prompt-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/prompt-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/PromptStudio.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/studio-presets.ts", import.meta.url), "utf8"),
   ]);
 
   const workflowCount = (data.match(/workflow\(\{/g) ?? []).length;
@@ -90,11 +92,26 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(engine, /Do not expose hidden chain-of-thought/);
   assert.match(page, /useMemo\(\s*\(\) => buildTeacherPrompt/);
   assert.match(page, /aria-live="polite"/);
-  assert.match(page, /POWER_MODES/);
-  assert.match(page, /advancedSettingsActive/);
+  assert.match(page, /STUDIO_RECIPES/);
+  assert.match(page, /surpriseMe/);
   assert.match(page, /result\.refinements/);
   assert.match(page, /Print or save prompt as PDF/);
-  assert.match(layout, /Teacher Prompt Studio \| Adaptive prompts for every teacher/);
-  assert.match(layout, /og-v2\.png/);
+  assert.match(page, /AI_PROVIDERS/);
+  assert.ok(
+    (presets.match(/workflowId: "/g) ?? []).length >= 20,
+    "expected at least 20 tap-first outcome recipes",
+  );
+  assert.match(presets, /Question paper/);
+  assert.match(presets, /Daily practice problem pack/);
+  assert.match(presets, /Resource fusion master pack/);
+  assert.match(presets, /CBSE \/ NCERT/);
+  assert.match(presets, /ICSE/);
+  assert.match(presets, /ISC/);
+  assert.match(presets, /ChatGPT/);
+  assert.match(presets, /Claude/);
+  assert.match(presets, /Gemini/);
+  assert.match(presets, /Grok/);
+  assert.match(layout, /One-tap AI missions for Indian teachers/);
+  assert.match(layout, /og-beast\.png/);
   assert.doesNotMatch(page, /scrollIntoView\(\).*buildTeacherPrompt/s);
 });

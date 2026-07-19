@@ -3,12 +3,16 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 const metadataBase: Metadata = {
-  title: "Teacher Prompt Studio | Adaptive prompts for every teacher",
+  title: "Teacher Prompt Studio | One-tap AI missions for Indian teachers",
   description:
-    "Build next-level teacher prompts with adaptive reasoning, pedagogy, cognitive demand, evidence alignment, source boundaries and built-in quality checks.",
+    "Create question papers, DPPs, notes, mind maps, lesson packs and deeper teacher prompts with tap-first recipes for Indian classrooms.",
   applicationName: "Teacher Prompt Studio",
   keywords: [
     "teacher prompt builder",
+    "CBSE question paper generator prompt",
+    "ICSE teacher AI prompts",
+    "DPP prompt generator",
+    "Indian teacher AI tools",
     "lesson plan prompt",
     "assessment prompt",
     "JEE prompt builder",
@@ -17,8 +21,8 @@ const metadataBase: Metadata = {
     "Socratic tutor prompt",
     "curriculum and assessment design",
   ],
-  authors: [{ name: "Indrajeet Yadav" }],
-  creator: "Indrajeet Yadav",
+  authors: [{ name: "Teacher Prompt Studio" }],
+  creator: "Teacher Prompt Studio",
   icons: {
     icon: "/og.png",
     shortcut: "/og.png",
@@ -47,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
         ? "http"
         : "https";
   const origin = `${protocol}://${host}`;
-  const imageUrl = `${origin}/og-v2.png`;
+  const imageUrl = `${origin}/og-beast.png`;
 
   return {
     ...metadataBase,
@@ -58,13 +62,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Teacher Prompt Studio",
       title: "Teacher Prompt Studio",
       description:
-        "Describe the teaching challenge. Get a prompt that thinks ahead—79 expert workflows with adaptive reasoning and built-in quality checks.",
+        "From classroom idea to AI-ready masterpiece—tap-first recipes, Indian board context and 79 expert teacher workflows.",
       images: [
         {
           url: imageUrl,
-          width: 1731,
-          height: 909,
-          alt: "Teacher Prompt Studio — describe the teaching challenge and get a prompt that thinks ahead.",
+          width: 1200,
+          height: 630,
+          alt: "Teacher Prompt Studio — from classroom idea to AI-ready masterpiece.",
         },
       ],
     },
@@ -72,7 +76,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Teacher Prompt Studio",
       description:
-        "79 expert teacher workflows powered by adaptive prompt architecture.",
+        "Question papers, DPPs, notes, mind maps and 79 expert workflows for Indian teachers.",
       images: [imageUrl],
     },
   };
@@ -81,7 +85,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#f3efe5",
+  themeColor: "#061511",
 };
 
 export default function RootLayout({

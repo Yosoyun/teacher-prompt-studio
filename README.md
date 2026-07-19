@@ -1,17 +1,21 @@
 # Teacher Prompt Studio
 
 Teacher Prompt Studio turns a teacher's real classroom job into a structured,
-review-ready prompt for any AI tool. It includes 79 searchable workflows across
-planning, teaching, assessment, resources, learner support, feedback,
-communication, and professional practice.
+review-ready prompt for any AI tool. The redesigned command centre starts with
+tap-first outcome recipes for question papers, DPPs, theory notes, mind maps,
+formula sheets, lesson packs and more, then exposes 79 specialist workflows
+across the complete teaching cycle.
 
 Live site: https://yosoyun.github.io/teacher-prompt-studio/
 
-The adaptive compiler now offers Precision, Expert, and Breakthrough modes. It
-builds an instruction hierarchy, aligns goals to evidence, applies
-workflow-specific methods, isolates pasted material as untrusted reference
-data, asks the target AI to stress-test and repair its artifact, and generates
-a six-part follow-up prompt pack for refinement.
+Teachers can choose an Indian board or programme, class, subject and chapter,
+then tune time, thinking level, prompt depth and practice volume with sliders.
+The adaptive compiler builds an instruction hierarchy, aligns goals to
+evidence, isolates pasted material as untrusted reference data, asks the target
+AI to stress-test and repair its artifact, and generates a six-part follow-up
+prompt pack for refinement. One-click actions copy the prompt and open ChatGPT,
+Claude, Gemini, Google AI Studio, Grok, Perplexity or Copilot without placing
+the prompt in a URL.
 
 ## Product principles
 

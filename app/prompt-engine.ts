@@ -540,13 +540,21 @@ function collaborationRule(input: BuilderInput) {
   return "Proceed without routine clarification. Make conservative, reversible assumptions, label only the material ones, and ask a question only when proceeding would risk accuracy, safety or validity.";
 }
 
+function allowsControlledPlaceholders(input: BuilderInput) {
+  return /^Editable\b/i.test(clean(input.outputForm)) || Boolean(input.workflow.flags?.includes("communication"));
+}
+
 function outputFormRule(input: BuilderInput) {
+  const templateRule = allowsControlledPlaceholders(input)
+    ? "For information that must be supplied later, use uniquely named {{PLACEHOLDER_FIELDS}} and list every intentional field in a teacher-only placeholder ledger with its purpose and an example value. Unlisted, dummy and learner-facing placeholders are forbidden."
+    : "";
+
   if (requiresPhysicalAudienceSeparation(input)) {
-    return "Teacher and learner materials must be separate physical files, not sections in one file. Learner files may contain only title block, instructions, stimuli, complete questions, response space and learner-safe references. Teacher files hold blueprint, assumptions, key, rubric, solutions, validation and local-verification notes. Reject any title such as ‘Teacher Version + Student Version’ and any teacher-only leakage into a learner file.";
+    return `Teacher and learner materials must be separate physical files, not sections in one file. Learner files may contain only title block, instructions, stimuli, complete questions, response space and learner-safe references. Teacher files hold blueprint, assumptions, key, rubric, solutions, validation and local-verification notes. Reject any title such as ‘Teacher Version + Student Version’ and any teacher-only leakage into a learner file.${templateRule ? ` ${templateRule}` : ""}`;
   }
 
-  if (input.outputForm.startsWith("Editable")) {
-    return "Return an editable reusable template. Replace context-specific values with clear {{PLACEHOLDER_NAMES}}, then include a compact field guide and one filled micro-example.";
+  if (templateRule) {
+    return `Return a polished artifact with controlled fields, not unfinished content. ${templateRule} Include one compact filled micro-example.`;
   }
 
   if (input.outputForm.startsWith("Teacher version")) {
@@ -737,6 +745,7 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
   const referencesPresent = hasReferenceData(input);
   const artifactFiles = effectiveArtifactFiles(input);
   const portableFallback = effectivePortableFallback(input, artifactFiles);
+  const controlledPlaceholders = allowsControlledPlaceholders(input);
   const isAssessment = Boolean(
     input.assessmentSpec ||
     input.workflow.flags?.includes("assessment"),
@@ -808,7 +817,9 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     `Required attached files: ${artifactFiles.filter((file) => file.required).map((file) => `${file.label} (${file.format})`).join(", ")}.`,
     `Optional companions, when useful and supported: ${artifactFiles.filter((file) => !file.required).map((file) => `${file.label} (${file.format})`).join(", ") || "none"}.`,
     "Create and attach the requested artifact files now using native file, code, canvas, presentation, spreadsheet or image tools available to you.",
-    "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, placeholders for future work or a promise to create the file later.",
+    controlledPlaceholders
+      ? "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, unlisted or dummy placeholders, or a promise to create the file later. Only controlled fields named in the teacher-only ledger are permitted."
+      : "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, placeholders for future work or a promise to create the file later.",
     "If a binary format cannot be attached, use the fallback below and still return a downloadable, render-ready artifact—not a prose answer.",
     `Portable fallback: ${portableFallback}`,
     "",
@@ -865,8 +876,10 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "A check has only PASS, FAIL or NOT_RUN status. NOT_RUN is a failure. Do not attach or release any artifact until every applicable release blocker is PASS.",
     "Build source → export requested file → reopen in an independent viewer or runtime → render every page, slide, screen and state → run gates on the exported result → repair → re-export and retest.",
     "Never claim a check passed without observable evidence. If the binary format cannot be created and validated, create and validate the specified portable HTML fallback instead.",
-    ...compilePreflightGateLines(input.artifact, input.outputLanguage, isAssessment, artifactFiles).map((rule) => `- ${rule}`),
-    "Template-mode exception: only intentional placeholders listed in a teacher-only placeholder ledger may remain; unlisted or learner-facing placeholders still fail release.",
+    ...compilePreflightGateLines(input.artifact, input.outputLanguage, isAssessment, artifactFiles, controlledPlaceholders).map((rule) => `- ${rule}`),
+    controlledPlaceholders
+      ? "Controlled-field mode: report ledgered fields separately from failures. Unlisted, dummy or learner-facing placeholders still fail release."
+      : "Ready-to-use mode: the placeholder count must be zero.",
   ];
 
   if (addOnRules.length) {
@@ -908,7 +921,9 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "FILE-ONLY FINAL RETURN",
     "Create and attach the named files now. Do not paste the artifact content into the conversation.",
     "After the files, return only a compact teacher-only receipt naming: files created/opened; rendered surfaces checked; languages and embedded fonts; placeholder, broken-glyph and audience-leak counts; item/mark reconciliation; assumptions and local-verification items.",
-    "Use numeric evidence such as: PRE-FLIGHT 14/14 PASS · FILES 3/3 OPENED · RENDER 8/8 PAGES · PLACEHOLDERS 0 · BROKEN GLYPHS 0 · LEARNER/TEACHER LEAKS 0. Never turn NOT_RUN into PASS.",
+    controlledPlaceholders
+      ? "Use numeric evidence such as: PRE-FLIGHT 14/14 PASS · FILES 3/3 OPENED · RENDER 8/8 PAGES · LEDGERED FIELDS 6/6 · UNLISTED PLACEHOLDERS 0 · DUMMY PLACEHOLDERS 0 · BROKEN GLYPHS 0 · LEARNER/TEACHER LEAKS 0. Never turn NOT_RUN into PASS."
+      : "Use numeric evidence such as: PRE-FLIGHT 14/14 PASS · FILES 3/3 OPENED · RENDER 8/8 PAGES · PLACEHOLDERS 0 · BROKEN GLYPHS 0 · LEARNER/TEACHER LEAKS 0. Never turn NOT_RUN into PASS.",
     "Do not add generic encouragement, prompt commentary, a tutorial about file creation or claims that the result is perfect or error-proof.",
     `<!-- studio-provenance: ${safeCreatorMarker} | creator: ${safeCreatorSignature} -->`,
   );

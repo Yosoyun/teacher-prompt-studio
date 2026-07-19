@@ -41,7 +41,7 @@ test("server-renders the teacher prompt studio", async () => {
 });
 
 test("keeps the prompt library broad and the old logic defects removed", async () => {
-  const [data, engine, page, layout, presets, artifacts, stage, preflight, styles] = await Promise.all([
+  const [data, engine, page, layout, presets, artifacts, stage, preflight, styles, assessmentSpec] = await Promise.all([
     readFile(new URL("../app/prompt-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/prompt-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/PromptStudio.tsx", import.meta.url), "utf8"),
@@ -51,6 +51,7 @@ test("keeps the prompt library broad and the old logic defects removed", async (
     readFile(new URL("../app/ArtifactStage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/artifact-preflight.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/assessment-spec.ts", import.meta.url), "utf8"),
   ]);
 
   const workflowCount = (data.match(/workflow\(\{/g) ?? []).length;
@@ -100,7 +101,10 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(engine, /requiresPhysicalAudienceSeparation/);
   assert.match(engine, /effectiveArtifactFiles/);
   assert.match(engine, /effectivePortableFallback/);
-  assert.match(engine, /compilePreflightGateLines\(input\.artifact, input\.outputLanguage, isAssessment, artifactFiles\)/);
+  assert.match(engine, /allowsControlledPlaceholders/);
+  assert.match(engine, /compilePreflightGateLines\(input\.artifact, input\.outputLanguage, isAssessment, artifactFiles, controlledPlaceholders\)/);
+  assert.match(engine, /LEDGERED FIELDS 6\/6/);
+  assert.match(engine, /UNLISTED PLACEHOLDERS 0/);
   assert.match(engine, /Never merge learner and teacher content into one fallback file/);
   assert.doesNotMatch(engine, /Portable fallback: \$\{input\.artifact\.fallback\}/);
   assert.match(engine, /artifactManifest: artifactFiles/);
@@ -133,6 +137,8 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(page, /"competitive-exam"/);
   assert.doesNotMatch(page, /selectedWorkflow\.flags\?\.includes\("assessment"\) \|\| artifactId === "worksheet-bundle"/);
   assert.match(page, /buildAssessmentSpec/);
+  assert.match(assessmentSpec, /profile\.rows\[rowIndex\]\.weight <= 0 \|\| counts\[rowIndex\] > 0/);
+  assert.match(assessmentSpec, /counts\[rowIndex\] = 1/);
   assert.match(page, /EXACTLY \$\{assessmentSpec\.totalItems\} items/);
   assert.match(page, /Exact item and mark totals are calculated automatically/);
   assert.doesNotMatch(page, /approximately \$\{questionCount\}/);
@@ -223,4 +229,17 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(layout, /Create real teaching artifacts/);
   assert.match(layout, /og-beast\.png/);
   assert.doesNotMatch(page, /download.*teacher-prompt\.txt/s);
+});
+
+test("preserves every promised positive assessment row at the minimum size", async () => {
+  const [{ ASSESSMENT_PROFILES }, { buildAssessmentSpec }] = await Promise.all([
+    import("../app/artifact-data.ts"),
+    import("../app/assessment-spec.ts"),
+  ]);
+  const rapid = ASSESSMENT_PROFILES.find((profile) => profile.id === "rapid-diagnostic");
+  const result = buildAssessmentSpec(rapid, 5);
+
+  assert.equal(result.totalItems, 5);
+  assert.deepEqual(result.rows.map((row) => row.count), [3, 1, 1]);
+  assert.equal(result.rows.reduce((total, row) => total + row.count, 0), 5);
 });

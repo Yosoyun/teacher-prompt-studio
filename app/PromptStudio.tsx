@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import ArtifactStage from "./ArtifactStage";
+import { buildAssessmentSpec } from "./assessment-spec";
 import {
   ARTIFACT_FAMILIES,
   ARTIFACT_PROFILES,
@@ -37,7 +38,6 @@ import {
 } from "./prompt-data";
 import {
   buildTeacherPrompt,
-  type AssessmentSpec,
   type BuilderInput,
 } from "./prompt-engine";
 import {
@@ -129,45 +129,6 @@ const gradeToLevel = (grade: number) => {
   if (grade <= 8) return "Middle school";
   if (grade <= 10) return "Secondary / high school";
   return "Senior secondary / exam prep";
-};
-
-const buildAssessmentSpec = (
-  profile: (typeof ASSESSMENT_PROFILES)[number],
-  totalItems: number,
-): AssessmentSpec => {
-  const rawCounts = profile.rows.map((row) => row.weight * totalItems);
-  const counts = rawCounts.map((value) => Math.floor(value));
-  const remaining = totalItems - counts.reduce((total, count) => total + count, 0);
-  const allocationOrder = rawCounts
-    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
-    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
-
-  for (let index = 0; index < remaining; index += 1) {
-    counts[allocationOrder[index % allocationOrder.length].index] += 1;
-  }
-
-  const rows = profile.rows
-    .map((row, index) => ({
-      label: row.label,
-      count: counts[index],
-      marksEach: row.marksEach,
-      totalMarks: counts[index] * row.marksEach,
-      purpose: row.purpose,
-    }))
-    .filter((row) => row.count > 0);
-  const totalMarks = rows.reduce((total, row) => total + row.totalMarks, 0);
-  const reasoningMarks = rows
-    .filter((row) => row.label !== "Single-select MCQ")
-    .reduce((total, row) => total + row.totalMarks, 0);
-
-  return {
-    profileId: profile.id,
-    profileLabel: profile.label,
-    totalItems,
-    totalMarks,
-    reasoningMarkShare: Math.round((reasoningMarks / Math.max(totalMarks, 1)) * 100),
-    rows,
-  };
 };
 
 function Insight({ children }: { children: ReactNode }) {

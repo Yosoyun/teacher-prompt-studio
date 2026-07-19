@@ -296,15 +296,20 @@ export function compilePreflightGateLines(
   outputLanguage: string,
   assessment: boolean,
   files: ArtifactFile[] = artifact.files,
+  controlledPlaceholders = false,
 ) {
   const contexts = contextsFor(artifact, files, outputLanguage, assessment);
   const gates = PREFLIGHT_GATES.filter((gate) =>
     gate.appliesTo.some((context) => contexts.has(context)),
   );
 
-  return gates.map((gate) =>
-    `${gate.id} — ${gate.title}: PASS only when ${gate.passWhen}. REJECT when ${gate.rejectWhen}. Repair: ${gate.repair}. Evidence: ${gate.evidence}.`,
-  );
+  return gates.map((gate) => {
+    if (gate.id === "G03_PLACEHOLDERS" && controlledPlaceholders) {
+      return "G03_PLACEHOLDERS — Controlled template fields: PASS only when every remaining named field is intentional, uniquely named, listed in a teacher-only placeholder ledger and used only where information must be supplied later; all unlisted, dummy and learner-facing placeholders must equal zero. REJECT unfinished prose, dummy options, TBD/TODO/FIXME, ellipsis-as-content or any field absent from the ledger. Repair: complete the content or register and explain the intentional field. Evidence: ledgered fields N/N; unlisted placeholders 0; dummy placeholders 0.";
+    }
+
+    return `${gate.id} — ${gate.title}: PASS only when ${gate.passWhen}. REJECT when ${gate.rejectWhen}. Repair: ${gate.repair}. Evidence: ${gate.evidence}.`;
+  });
 }
 
 export function compileLanguageProductionRules(outputLanguage: string) {

@@ -1,26 +1,24 @@
 # Teacher Prompt Studio
 
-Teacher Prompt Studio turns a teacher's real classroom job into a structured,
-review-ready prompt for any AI tool. The redesigned command centre starts with
-tap-first outcome recipes for question papers, DPPs, theory notes, mind maps,
-formula sheets, lesson packs and more, then exposes 79 specialist workflows
-across the complete teaching cycle.
+Teacher Prompt Studio turns a teacher's real classroom job into an artifact-first
+AI build brief. A focused four-step maker helps teachers choose the outcome, fit
+it to their classroom, select real file formats and launch the job in a capable
+AI without writing prompts. The prompt remains backstage.
 
 Live site: https://yosoyun.github.io/teacher-prompt-studio/
 
-Teachers can choose an Indian board or programme, class, subject and chapter,
-then tune time, thinking level, prompt depth and practice volume with sliders.
-The adaptive compiler builds an instruction hierarchy, aligns goals to
-evidence, isolates pasted material as untrusted reference data, asks the target
-AI to stress-test and repair its artifact, and generates a six-part follow-up
-prompt pack for refinement. One-click actions copy the prompt and open ChatGPT,
-Claude, Gemini, Google AI Studio, Grok, Perplexity or Copilot without placing
-the prompt in a URL.
+Teachers can request coordinated PDF/DOCX bundles, print-ready PDFs, editable
+documents, slide decks, infographics, flowcharts, learning websites, interactive
+simulations, workbooks, media storyboards, brainstorm canvases and complete
+resource packs. The compiler rejects ordinary chat prose, defines exact file and
+production requirements, runs topic-specific originality tests, embeds a
+metadata-only creator marker and supplies an easy same-chat improvement path.
+The full library still includes 79 specialist workflows.
 
 ## Product principles
 
 - A missing topic never silently becomes “full syllabus.”
-- The prompt updates live, so copy and download can never use stale output.
+- The hidden build instructions update live, so every AI handoff uses the latest choices.
 - Exam rules, curriculum codes, sources, and statistics are never invented.
 - Student information must be anonymized before it is added to a prompt.
 - Accessibility, source fidelity, safety, and teacher review are built into the

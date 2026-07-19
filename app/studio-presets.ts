@@ -534,6 +534,86 @@ export const STUDIO_RECIPES: StudioRecipe[] = [
     accent: "violet",
     powerMode: "Precision",
   },
+  {
+    id: "interactive-simulation",
+    title: "Interactive concept simulation",
+    shortTitle: "Simulation",
+    glyph: "SIM",
+    category: "Create",
+    workflowId: "branching-simulation",
+    summary: "A working model or scenario with controls, feedback, reset and debrief.",
+    explanation:
+      "Builds a real runnable artifact where every control or decision changes the model, evidence or consequence.",
+    objective:
+      "Create a self-contained interactive simulation that lets learners test ideas, observe consequences and explain the underlying concept.",
+    details:
+      "Include a clear challenge, meaningful controls or branches, visible state, feedback, reset, edge-case handling, teacher mode and a rigorous debrief.",
+    addOns: ["success", "misconceptions", "accessibility", "examples", "safety"],
+    outputs: ["Runnable simulation", "Control model", "Feedback system", "Teacher mode", "Debrief"],
+    timeSaved: "Half a day",
+    accent: "cyan",
+    powerMode: "Breakthrough",
+  },
+  {
+    id: "learning-website",
+    title: "Interactive chapter learning website",
+    shortTitle: "Learning website",
+    glyph: "WEB",
+    category: "Create",
+    workflowId: "concept-explainer",
+    summary: "A responsive mini-site with explanation, interaction and evidence of learning.",
+    explanation:
+      "Turns the topic into an explorable learning journey instead of pasting textbook text into a webpage.",
+    objective:
+      "Build a responsive, accessible learning website that explains the topic and lets learners actively test their understanding.",
+    details:
+      "Use a shallow navigation path, subject-native visuals, one memorable interaction, meaningful feedback, progress, reset, print mode and offline-safe behavior.",
+    addOns: ["examples", "misconceptions", "accessibility", "success", "extension"],
+    outputs: ["Runnable website", "Concept journey", "Interactive model", "Practice feedback", "Print view"],
+    timeSaved: "Half a day",
+    accent: "violet",
+    powerMode: "Breakthrough",
+  },
+  {
+    id: "visual-flowchart",
+    title: "Easy-to-follow visual flowchart",
+    shortTitle: "Visual flowchart",
+    glyph: "FLOW",
+    category: "Create",
+    workflowId: "graphic-knowledge-organizer",
+    summary: "A rendered decision route with numbered nodes and labelled branches.",
+    explanation:
+      "Makes every next move unmistakable, tests all routes and includes an accessible numbered equivalent.",
+    objective:
+      "Create a clear visual flowchart that helps learners or teachers follow the selected process, decision or concept relationship without confusion.",
+    details:
+      "Use action-led nodes, a numbered main route, labelled arrows, minimal crossings, clear start and finish states, a legend and clickable HTML version.",
+    addOns: ["accessibility", "examples", "misconceptions", "success"],
+    outputs: ["Rendered flowchart", "Clickable route", "Numbered text path", "Legend", "Use guide"],
+    timeSaved: "90 min",
+    accent: "coral",
+    powerMode: "Breakthrough",
+  },
+  {
+    id: "brainstorm-lab",
+    title: "Visual teacher brainstorm and decision lab",
+    shortTitle: "Brainstorm canvas",
+    glyph: "IDEA",
+    category: "Create",
+    workflowId: "project-unit",
+    summary: "Idea clusters, critical challenges, priorities and a practical next-action path.",
+    explanation:
+      "Moves beyond a generic idea list by comparing educational value, effort, evidence, risk and classroom feasibility.",
+    objective:
+      "Create an interactive brainstorm canvas that produces original, useful teaching ideas and turns the strongest ones into an actionable plan.",
+    details:
+      "Generate diverse routes, group them by purpose, challenge weak assumptions, score high-potential ideas and recommend one synthesis with next steps.",
+    addOns: ["alternatives", "culture", "lowResource", "success", "sources"],
+    outputs: ["Idea landscape", "Critical challenges", "Priority matrix", "Recommended synthesis", "Action path"],
+    timeSaved: "2–3 hours",
+    accent: "amber",
+    powerMode: "Breakthrough",
+  },
 ];
 
 export const BOARD_OPTIONS = [

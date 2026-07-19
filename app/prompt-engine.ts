@@ -3,9 +3,17 @@ import {
   ADD_ON_PROMPTS,
   type PromptWorkflow,
 } from "./prompt-data";
+import type { ArtifactFile, ArtifactProfile } from "./artifact-data";
 
 export type BuilderInput = {
   workflow: PromptWorkflow;
+  recipeId: string;
+  artifact: ArtifactProfile;
+  requiredOutputs: string[];
+  visualStyle: string;
+  interactionMode: string;
+  creatorSignature: string;
+  creatorMarker: string;
   subject: string;
   customSubject: string;
   level: string;
@@ -61,6 +69,8 @@ export type RefinementPrompt = {
 
 export type PromptResult = {
   prompt: string;
+  artifactLabel: string;
+  artifactManifest: ArtifactFile[];
   issues: PromptIssue[];
   score: number;
   status: "Incomplete" | "Needs a few details" | "Well framed" | "Ready to run";
@@ -400,6 +410,7 @@ function qualityRules(input: BuilderInput) {
 
 function uniqueSections(input: BuilderInput) {
   const sections = [
+    ...input.requiredOutputs,
     ...input.workflow.outputSections,
     ...input.addOns.map((id) => ADD_ON_OUTPUT_SECTIONS[id]).filter(Boolean),
   ];
@@ -440,46 +451,97 @@ function outputFormRule(input: BuilderInput) {
 function buildRefinements(input: BuilderInput): RefinementPrompt[] {
   const subject = resolvedSubject(input) || "the subject";
   const topic = clean(input.topic) || "the original topic";
+  const artifact = input.artifact.label;
   const preserve =
-    "Preserve the original goal, learner level, non-negotiable constraints and source boundaries. Do not reveal private chain-of-thought; return only the revised artifact and a concise change ledger.";
+    `Preserve the original goal, learner level, ${artifact} format, creator metadata, non-negotiable constraints and source boundaries. Do not reveal private chain-of-thought. Modify the existing artifact and attach a revised, versioned file; do not paste its contents into chat.`;
 
   return [
     {
       id: "audit-repair",
-      label: "Audit & repair",
-      description: "Find hidden weaknesses and return a corrected version.",
-      prompt: `Audit the artifact above as a demanding but fair expert reviewer. Test alignment, factual accuracy, feasibility, accessibility, internal consistency, source fidelity and workflow-specific requirements. Repair every material failure you find. ${preserve}`,
+      label: "Fix the file",
+      description: "Repair text-only, missing, clipped or incorrect output.",
+      prompt: `The required ${artifact} was not delivered correctly. Audit the existing response and files for missing deliverables, incorrect format, clipping, broken layout, incomplete sections, factual errors and unusable interactions. Rebuild every material failure and attach the corrected files now. ${preserve}`,
     },
     {
       id: "deepen",
       label: "Deepen thinking",
-      description: "Raise reasoning, transfer and metacognition.",
-      prompt: `Upgrade the artifact for deeper ${subject} thinking about ${topic}. Strengthen representation, explanation, misconception contrast, strategic choice, transfer and metacognitive reflection without simply adding length or harder vocabulary. ${preserve}`,
+      description: "Replace generic content with subject-native depth.",
+      prompt: `Upgrade the ${artifact} for deeper ${subject} thinking about ${topic}. Apply the topic-substitution test and rebuild anything that could fit another chapter unchanged. Strengthen subject-native representations, misconception contrast, strategic choice, transfer and one memorable conceptual anchor without simply adding length. ${preserve}`,
     },
     {
-      id: "alternate",
-      label: "Different route",
-      description: "Create a genuinely different learning design.",
-      prompt: `Create a conceptually different route to the same outcome. Change the underlying learning architecture—not only the theme, examples or wording. Briefly state the key trade-off, then provide the complete alternative. ${preserve}`,
+      id: "visual",
+      label: "Make it unforgettable",
+      description: "Art-direct the same artifact with purposeful visuals.",
+      prompt: `Art-direct the existing ${artifact} so it feels distinctive, premium and memorable while becoming easier to use. Derive the visual metaphor, hierarchy and motion from ${topic}; do not add generic 3D effects, stock decoration or ornamental controls. Preserve accuracy and rebuild the file with a stronger visual system. ${preserve}`,
     },
     {
       id: "adapt-access",
-      label: "Adapt access",
-      description: "Remove barriers while preserving intellectual demand.",
-      prompt: `Adapt the artifact for greater access and participation. Identify avoidable language, sensory, executive-function, cultural, resource or participation barriers; revise them while preserving the core learning construct and intellectual dignity. ${preserve}`,
+      label: "Fit my learners",
+      description: "Make it bilingual, accessible, easier or harder.",
+      prompt: `Adapt the existing ${artifact} for the learner need I give next. Identify avoidable language, sensory, executive-function, cultural, resource or participation barriers; revise them while preserving the core learning construct, visual system and intellectual dignity. Keep unaffected pages, screens and files stable. ${preserve}`,
     },
     {
-      id: "compress",
-      label: "Fit less time",
-      description: "Protect the essentials under a tighter limit.",
-      prompt: `Redesign the artifact for half the original time or workload. Protect the highest-leverage learning and evidence, remove low-value steps, and state what should be deferred rather than rushed. ${preserve}`,
+      id: "transform",
+      label: "Change the format",
+      description: "Recompose it for a different medium.",
+      prompt: `Transform the existing ${artifact} into the file format I name next. Recompose the information architecture, interactions, density and visual language for the new medium rather than copying text into a new container. Preserve the learning goal, verified content and creator metadata, then attach the new file. ${preserve}`,
     },
     {
-      id: "verify",
-      label: "Verify sources",
-      description: "Separate evidence, assumptions and claims needing checks.",
-      prompt: `Run a source-and-claims verification pass. Separate claims supported by supplied material, well-established knowledge, inference, and statements requiring an authoritative check. Remove invented citations, rules, dates, codes or quotations and repair unsupported wording. ${preserve}`,
+      id: "publish",
+      label: "Make share-ready",
+      description: "Prepare the final classroom delivery version.",
+      prompt: `Prepare the existing ${artifact} for the delivery channel I name next: print, phone, projector, LMS or offline sharing. Optimise size, contrast, navigation, pagination, filenames and accessibility for that channel. Run a final answer, link, branch, layout and source check, then attach only the production-ready version. ${preserve}`,
     },
+  ];
+}
+
+function artifactManifestLines(input: BuilderInput) {
+  return input.artifact.files.map((file, index) =>
+    `${index + 1}. ${file.label} — ${file.format} — ${file.audience}${file.required ? " — REQUIRED" : " — optional companion"}`,
+  );
+}
+
+function nonGenericGates(input: BuilderInput) {
+  return [
+    "Privately generate three genuinely different artifact concepts, score them for conceptual fit, originality, learnability, production feasibility and accessibility, then build only the strongest synthesis.",
+    `Run the topic-substitution test: if ${clean(input.topic) || "the topic"} could be replaced with another topic without materially changing the architecture, examples, representations and interactions, reject the draft and rebuild it.`,
+    "Every major page, screen, scene or section must contain a subject-specific representation, decision, example, misconception contrast or evidence move.",
+    "Derive one memorable conceptual anchor from the topic itself. Do not rely on generic sci-fi dashboards, random gradients, clip-art, decorative 3D objects or boilerplate gamification.",
+    "Every visual, animation and control must clarify, demonstrate, compare, reveal, practise or assess something. Remove any element that is merely impressive-looking.",
+    "Include one misconception-revealing contrast, one meaningful learner choice and one transfer challenge appropriate to the selected workflow.",
+    "Make the selected class, board, language, time, class size and resources visibly affect pacing, examples, density, interaction and file structure.",
+    "Add one surprising but practical feature that improves learning, teacher confidence or classroom usability; name it in the delivery receipt.",
+  ];
+}
+
+function indianClassroomRules(input: BuilderInput) {
+  if (!/(india|cbse|ncert|icse|isc|state board|nios)/i.test(
+    `${input.countryRegion} ${input.curriculum}`,
+  )) {
+    return [
+      "Use the stated local education terminology and verify jurisdiction-specific rules against supplied authoritative material.",
+    ];
+  }
+
+  return [
+    "Use ‘Class’ rather than ‘Grade’ for school levels and preserve CBSE, NCERT, ICSE, ISC, State Board and NIOS terminology accurately.",
+    "Never invent current syllabus codes, official paper patterns, competency weightings, circulars, marks rules or board claims; require teacher-supplied authoritative material for exact alignment.",
+    "Use Unicode-safe Indian-language fonts and lock equations, symbols, scientific notation and technical terms across bilingual versions.",
+    "Design print resources for A4, ordinary school printers and a useful low-ink photocopy version; design digital resources for shared low-end phones, low bandwidth and classroom projection.",
+    "Account realistically for large classes, limited printing, shared devices, fixed seating and teacher attention when those constraints are present.",
+    "Use ₹, lakh/crore, SI units and Indian contexts only where educationally natural; avoid regional, religious, caste, gender and urban/rural stereotypes.",
+  ];
+}
+
+function provenanceRules(input: BuilderInput) {
+  const signature = clean(input.creatorSignature) || "Teacher Prompt Studio";
+  const marker = clean(input.creatorMarker) || "TPS-79";
+  return [
+    `Creator signature: ${signature}`,
+    `Stable marker: ${marker}`,
+    "Embed the creator signature only in native metadata: PDF Creator/Keywords, DOCX/PPTX/XLSX core properties, HTML author meta and source comment, PNG metadata, or the ZIP manifest.",
+    "Never print the signature as a visible watermark, footer or learner-facing credit. Never use invisible Unicode, tracking code or deceptive authorship claims.",
+    "If the target format has no reliable metadata field, preserve the stable marker as a harmless source comment that does not change the visible artifact.",
   ];
 }
 
@@ -523,6 +585,12 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     .map((id) => ADD_ON_PROMPTS[id])
     .filter(Boolean);
   const outputSections = uniqueSections(input);
+  const safeCreatorSignature = (clean(input.creatorSignature) || "Teacher Prompt Studio")
+    .replace(/--+/g, "-")
+    .replace(/[<>]/g, "");
+  const safeCreatorMarker = (clean(input.creatorMarker) || "TPS-79")
+    .replace(/--+/g, "-")
+    .replace(/[<>]/g, "");
   const referencesPresent = hasReferenceData(input);
   const referenceData = JSON.stringify(
     {
@@ -580,6 +648,40 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "WORKFLOW METHOD",
     ...input.workflow.taskRules.map((rule) => `- ${rule}`),
     ...(input.workflow.expertMethod ?? []).map((rule) => `- ${rule}`),
+    "",
+    "MANDATORY FILE DELIVERY",
+    `Primary artifact: ${input.artifact.label}.`,
+    `Production canvas: ${input.artifact.canvas}.`,
+    `Required attached files: ${input.artifact.files.filter((file) => file.required).map((file) => `${file.label} (${file.format})`).join(", ")}.`,
+    `Optional companions, when useful and supported: ${input.artifact.files.filter((file) => !file.required).map((file) => `${file.label} (${file.format})`).join(", ") || "none"}.`,
+    "Create and attach the requested artifact files now using native file, code, canvas, presentation, spreadsheet or image tools available to you.",
+    "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, placeholders for future work or a promise to create the file later.",
+    "If a binary format cannot be attached, use the fallback below and still return a downloadable, render-ready artifact—not a prose answer.",
+    `Portable fallback: ${input.artifact.fallback}`,
+    "",
+    "DELIVERABLE MANIFEST",
+    ...artifactManifestLines(input),
+    "",
+    "ARTIFACT CONTENT ARCHITECTURE",
+    "The finished files must contain these aligned parts in an order appropriate to the medium:",
+    ...outputSections.map((section, index) => `${index + 1}. ${section}`),
+    "Recompose each part for the selected medium. Do not paste the same wall of text into every file, page, slide, screen or scene.",
+    "",
+    "FORMAT AND PRODUCTION SPECIFICATION",
+    ...input.artifact.deliveryRules.map((rule) => `- ${rule}`),
+    `- Visual direction: ${clean(input.visualStyle) || "Purposeful, topic-derived and classroom-legible"}.`,
+    `- Interaction behavior: ${clean(input.interactionMode) || "Use interaction only where it materially improves learning or teacher usability"}.`,
+    `- Tone: ${clean(input.tone) || "clear, encouraging and professional"}.`,
+    `- Depth target: ${clean(input.outputLength) || "practical classroom detail"}.`,
+    "",
+    "INDIAN CLASSROOM FIT",
+    ...indianClassroomRules(input).map((rule) => `- ${rule}`),
+    "",
+    "NON-GENERICITY REJECTION TEST",
+    ...nonGenericGates(input).map((rule, index) => `${index + 1}. ${rule}`),
+    "",
+    "PROVENANCE METADATA — HIDDEN FROM LEARNER-FACING CONTENT",
+    ...provenanceRules(input).map((rule) => `- ${rule}`),
   ];
 
   if (addOnRules.length) {
@@ -611,22 +713,24 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "INTERACTION BRANCH",
     collaborationRule(input),
     "",
-    "OUTPUT CONTRACT",
+    "AUDIENCE SEPARATION",
     outputFormRule(input),
-    `Use a ${clean(input.tone) || "clear, encouraging and professional"} tone. Target: ${clean(input.outputLength) || "practical classroom detail"}.`,
-    "When the artifact branch applies, return these sections in this exact order:",
-    ...outputSections.map((section, index) => `${index + 1}. ${section}`),
-    "Use headings, short paragraphs, lists and tables only when they improve use. Make instructions executable, examples concrete and placeholders unmistakable.",
     "",
     "QUALITY GATES — CHECK, REPAIR, THEN RETURN",
     ...qualityRules(input).map((rule, index) => `${index + 1}. ${rule}`),
+    ...input.artifact.qualityGates.map((rule, index) => `${qualityRules(input).length + index + 1}. ${rule}`),
     "",
-    "FINAL RETURN RULE",
-    "Return the requested artifact, followed by a compact verification ledger containing: assumptions made, checks completed, and items requiring teacher or local verification. Do not add generic encouragement, prompt commentary or claims that the result is perfect or error-proof.",
+    "FILE-ONLY FINAL RETURN",
+    "Create and attach the named files now. Do not paste the artifact content into the conversation.",
+    "After the files, return only a delivery receipt of no more than five lines naming: files created, checks passed, the memorable practical feature, assumptions made, and items requiring teacher or local verification.",
+    "Do not add generic encouragement, prompt commentary, a tutorial about file creation or claims that the result is perfect or error-proof.",
+    `<!-- studio-provenance: ${safeCreatorMarker} | creator: ${safeCreatorSignature} -->`,
   );
 
   return {
     prompt: lines.join("\n"),
+    artifactLabel: input.artifact.label,
+    artifactManifest: input.artifact.files,
     issues,
     score,
     status,

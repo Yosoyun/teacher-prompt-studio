@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 const metadataBase: Metadata = {
-  title: "Teacher Prompt Studio | One-tap AI missions for Indian teachers",
+  title: "Teacher Prompt Studio | Create real teaching artifacts",
   description:
-    "Create question papers, DPPs, notes, mind maps, lesson packs and deeper teacher prompts with tap-first recipes for Indian classrooms.",
+    "Choose a classroom outcome and prepare exact AI instructions for real PDFs, DOCX files, slides, visuals, websites, flowcharts, workbooks and simulations.",
   applicationName: "Teacher Prompt Studio",
   keywords: [
     "teacher prompt builder",
@@ -13,6 +13,9 @@ const metadataBase: Metadata = {
     "ICSE teacher AI prompts",
     "DPP prompt generator",
     "Indian teacher AI tools",
+    "AI teaching artifact maker",
+    "interactive classroom simulation builder",
+    "teacher PDF and DOCX generator",
     "lesson plan prompt",
     "assessment prompt",
     "JEE prompt builder",
@@ -62,13 +65,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Teacher Prompt Studio",
       title: "Teacher Prompt Studio",
       description:
-        "From classroom idea to AI-ready masterpiece—tap-first recipes, Indian board context and 79 expert teacher workflows.",
+        "Choose it, shape it, and create the actual artifact—PDFs, DOCX files, visuals, websites, workbooks and simulations for Indian classrooms.",
       images: [
         {
           url: imageUrl,
           width: 1200,
           height: 630,
-          alt: "Teacher Prompt Studio — from classroom idea to AI-ready masterpiece.",
+          alt: "Teacher Prompt Studio — artifact-first AI creation for teachers.",
         },
       ],
     },
@@ -76,7 +79,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Teacher Prompt Studio",
       description:
-        "Question papers, DPPs, notes, mind maps and 79 expert workflows for Indian teachers.",
+        "A comfortable four-step maker for real teaching files, interactive resources and 79 expert workflows.",
       images: [imageUrl],
     },
   };
@@ -85,7 +88,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#061511",
+  themeColor: "#f1efe8",
 };
 
 export default function RootLayout({

@@ -2,21 +2,31 @@
 
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
-  type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from "react";
+import ArtifactStage from "./ArtifactStage";
+import {
+  ARTIFACT_FAMILIES,
+  ARTIFACT_PROFILES,
+  CREATOR_MARKER,
+  CREATOR_SIGNATURE,
+  FINISH_LEVELS,
+  FOLLOW_UP_PATHS,
+  VISUAL_STYLES,
+  defaultArtifactId,
+  getArtifactProfile,
+  type ArtifactFamily,
+  type ArtifactId,
+} from "./artifact-data";
 import {
   ADD_ONS,
   CATEGORY_META,
-  COGNITIVE_DEMANDS,
-  COLLABORATION_STYLES,
-  OUTPUT_FORMS,
-  PEDAGOGY_LENSES,
   SUBJECTS,
   WORKFLOW_CATEGORIES,
   WORKFLOWS,
@@ -41,13 +51,18 @@ import {
 } from "./studio-presets";
 
 type CategoryFilter = "All" | WorkflowCategory;
-type PromptView = "overview" | "full";
 type AudienceMode = "school" | "early" | "undergraduate" | "vocational" | "adult";
+type StepId = 0 | 1 | 2 | 3;
 
 const DEFAULT_RECIPE = STUDIO_RECIPES[0];
 const DEFAULT_WORKFLOW = WORKFLOWS.find(
   (item) => item.id === DEFAULT_RECIPE.workflowId,
 ) as PromptWorkflow;
+const DEFAULT_ARTIFACT = defaultArtifactId(
+  DEFAULT_RECIPE.id,
+  DEFAULT_WORKFLOW.id,
+  DEFAULT_WORKFLOW.category,
+);
 
 const initialForm = {
   subject: "Mathematics",
@@ -57,7 +72,7 @@ const initialForm = {
   topic: "Quadratic equations",
   curriculum: "CBSE / NCERT",
   objective: DEFAULT_RECIPE.objective,
-  learnerContext: "Class 10, mixed-readiness group of 40 learners",
+  learnerContext: "Mixed-readiness class with familiar school routines",
   priorKnowledge: "",
   duration: "45 minutes",
   modality: "In person",
@@ -82,6 +97,18 @@ const initialForm = {
 
 type FormState = typeof initialForm;
 
+const STEP_META: Array<{
+  id: StepId;
+  label: string;
+  short: string;
+  description: string;
+}> = [
+  { id: 0, label: "Choose", short: "What to make", description: "Pick a ready teaching mission" },
+  { id: 1, label: "Fit", short: "Your classroom", description: "Board, class, subject and chapter" },
+  { id: 2, label: "Finish", short: "Real files", description: "Choose format, polish and power-ups" },
+  { id: 3, label: "Create", short: "Launch AI", description: "Build the artifact and improve it" },
+];
+
 const unique = (items: string[]) => [...new Set(items)];
 
 const gradeToLevel = (grade: number) => {
@@ -91,172 +118,176 @@ const gradeToLevel = (grade: number) => {
   return "Senior secondary / exam prep";
 };
 
-function HelpTip({ title, children }: { title: string; children: ReactNode }) {
+function Insight({ children }: { children: ReactNode }) {
   return (
-    <details className="help-tip">
-      <summary aria-label={`Why ${title} matters`}>?</summary>
-      <div>
-        <strong>{title}</strong>
-        <p>{children}</p>
-      </div>
-    </details>
-  );
-}
-
-function OrbitVisual({ recipe }: { recipe: StudioRecipe | undefined }) {
-  const orbitItems = [
-    { label: "Paper + key", className: "orbit-card orbit-card-a", glyph: "QP" },
-    { label: "Daily DPP", className: "orbit-card orbit-card-b", glyph: "DP" },
-    { label: "Mind map", className: "orbit-card orbit-card-c", glyph: "MM" },
-    { label: "Theory notes", className: "orbit-card orbit-card-d", glyph: "TN" },
-    { label: "Formula sheet", className: "orbit-card orbit-card-e", glyph: "FX" },
-    { label: "Doubt solver", className: "orbit-card orbit-card-f", glyph: "ST" },
-  ];
-
-  return (
-    <div className="orbit-visual" aria-label="Teaching outcomes orbiting the prompt engine">
-      <div className="orbit-glow" />
-      <div className="orbit-ring orbit-ring-one" />
-      <div className="orbit-ring orbit-ring-two" />
-      <div className="orbit-ring orbit-ring-three" />
-      <div className="engine-core">
-        <span className="engine-kicker">शिक्षा × AI</span>
-        <strong>{recipe?.glyph ?? "79"}</strong>
-        <span>{recipe?.shortTitle ?? "expert workflows"}</span>
-      </div>
-      {orbitItems.map((item) => (
-        <div className={item.className} key={item.label}>
-          <span>{item.glyph}</span>
-          <strong>{item.label}</strong>
-        </div>
-      ))}
-      <div className="orbit-status">
-        <i aria-hidden="true" />
-        Classroom engine online
-      </div>
-    </div>
-  );
-}
-
-function SliderCard({
-  label,
-  valueLabel,
-  note,
-  children,
-}: {
-  label: string;
-  valueLabel: string;
-  note: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="slider-card">
-      <div className="slider-card-head">
-        <span>{label}</span>
-        <strong>{valueLabel}</strong>
-      </div>
+    <span className="insight">
+      <i aria-hidden="true">i</i>
       {children}
-      <p>{note}</p>
-    </div>
+    </span>
   );
 }
 
 export default function PromptStudio() {
-  const [selectedWorkflow, setSelectedWorkflow] =
-    useState<PromptWorkflow>(DEFAULT_WORKFLOW);
+  const [activeStep, setActiveStep] = useState<StepId>(0);
+  const [maxStep, setMaxStep] = useState<StepId>(0);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<PromptWorkflow>(DEFAULT_WORKFLOW);
   const [selectedRecipeId, setSelectedRecipeId] = useState(DEFAULT_RECIPE.id);
-  const [recipeCategory, setRecipeCategory] =
-    useState<RecipeCategory>("Popular");
+  const [recipeCategory, setRecipeCategory] = useState<RecipeCategory>("Popular");
   const [form, setForm] = useState<FormState>(initialForm);
   const [addOns, setAddOns] = useState<string[]>(
     unique([...DEFAULT_WORKFLOW.defaultAddOns, ...DEFAULT_RECIPE.addOns]),
   );
+  const [artifactId, setArtifactId] = useState<ArtifactId>(DEFAULT_ARTIFACT);
+  const [artifactFamily, setArtifactFamily] = useState<ArtifactFamily>("Print");
+  const [visualStyleId, setVisualStyleId] = useState("editorial-notebook");
+  const [finishId, setFinishId] = useState("polished");
+  const [interactionMode, setInteractionMode] = useState("Guided exploration with meaningful feedback, clear progress and a reset path");
+  const [selectedProviderId, setSelectedProviderId] = useState("chatgpt");
   const [boardId, setBoardId] = useState("cbse");
   const [grade, setGrade] = useState(10);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("school");
   const [classSize, setClassSize] = useState(40);
   const [timeIndex, setTimeIndex] = useState(3);
   const [difficultyIndex, setDifficultyIndex] = useState(1);
-  const [depthIndex, setDepthIndex] = useState(1);
   const [questionCount, setQuestionCount] = useState(20);
   const [copyStatus, setCopyStatus] = useState("");
-  const [promptView, setPromptView] = useState<PromptView>("overview");
   const [attemptedAction, setAttemptedAction] = useState(false);
   const [workflowSearch, setWorkflowSearch] = useState("");
-  const [workflowCategory, setWorkflowCategory] =
-    useState<CategoryFilter>("All");
+  const [workflowCategory, setWorkflowCategory] = useState<CategoryFilter>("All");
   const [showAllRecipes, setShowAllRecipes] = useState(false);
   const [showAllAddOns, setShowAllAddOns] = useState(false);
-  const [surpriseKey, setSurpriseKey] = useState(0);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const [showAllFormats, setShowAllFormats] = useState(false);
+  const [launched, setLaunched] = useState(false);
+  const [followUpTrail, setFollowUpTrail] = useState<string[]>([]);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileReady, setProfileReady] = useState(false);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const expertDetailsRef = useRef<HTMLDetailsElement>(null);
+  const firstStepChange = useRef(true);
 
-  const selectedRecipe = STUDIO_RECIPES.find(
-    (recipe) => recipe.id === selectedRecipeId,
-  );
-  const selectedBoard = BOARD_OPTIONS.find((board) => board.id === boardId);
+  const selectedRecipe = STUDIO_RECIPES.find((recipe) => recipe.id === selectedRecipeId);
+  const selectedBoard = BOARD_OPTIONS.find((board) => board.id === boardId) ?? BOARD_OPTIONS[0];
+  const artifact = getArtifactProfile(artifactId);
+  const selectedProvider = AI_PROVIDERS.find((provider) => provider.id === selectedProviderId) ?? AI_PROVIDERS[0];
+  const visualStyle = VISUAL_STYLES.find((style) => style.id === visualStyleId) ?? VISUAL_STYLES[1];
+  const finish = FINISH_LEVELS.find((item) => item.id === finishId) ?? FINISH_LEVELS[1];
   const topicSuggestions = TOPIC_BANK[form.subject] ?? [
     "Introduce a new concept",
     "Revision of a difficult chapter",
     "Application and problem solving",
     "End-of-unit assessment",
   ];
+  const classLabel = audienceMode === "school" ? `Class ${grade}` : form.level;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem("teacher-prompt-studio-classroom");
+        if (saved) {
+          const profile = JSON.parse(saved) as {
+            boardId?: string;
+            grade?: number;
+            subject?: string;
+            outputLanguage?: string;
+            classSize?: number;
+          };
+          const savedBoard = BOARD_OPTIONS.find((item) => item.id === profile.boardId);
+          const savedSubject = SUBJECTS.includes(profile.subject ?? "") ? profile.subject : undefined;
+          const savedLanguage = LANGUAGE_OPTIONS.includes(profile.outputLanguage ?? "") ? profile.outputLanguage : undefined;
+          const savedGrade = Math.min(12, Math.max(1, Number(profile.grade) || 10));
+          setBoardId(savedBoard?.id ?? "cbse");
+          setGrade(savedGrade);
+          setClassSize(Math.min(60, Math.max(10, Number(profile.classSize) || 40)));
+          setForm((current) => ({
+            ...current,
+            curriculum: savedBoard?.value ?? current.curriculum,
+            subject: savedSubject ?? current.subject,
+            level: gradeToLevel(savedGrade),
+            outputLanguage: savedLanguage ?? current.outputLanguage,
+          }));
+          setProfileLoaded(true);
+        }
+      } catch {
+        setProfileLoaded(false);
+      } finally {
+        setProfileReady(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!profileReady) return;
+    try {
+      window.localStorage.setItem(
+        "teacher-prompt-studio-classroom",
+        JSON.stringify({ boardId, grade, subject: form.subject, outputLanguage: form.outputLanguage, classSize }),
+      );
+    } catch {
+      // A private browsing setting may disable local preferences; the builder still works.
+    }
+  }, [boardId, classSize, form.outputLanguage, form.subject, grade, profileReady]);
+
+  useEffect(() => {
+    if (firstStepChange.current) {
+      firstStepChange.current = false;
+      return;
+    }
+    window.setTimeout(() => stepHeadingRef.current?.focus(), 0);
+  }, [activeStep]);
 
   const builderInput: BuilderInput = useMemo(
     () => ({
       workflow: selectedWorkflow,
+      recipeId: selectedRecipeId,
+      artifact,
+      requiredOutputs: selectedRecipe?.outputs ?? selectedWorkflow.outputSections,
+      visualStyle: `${visualStyle.label}: ${visualStyle.description}`,
+      interactionMode,
+      creatorSignature: CREATOR_SIGNATURE,
+      creatorMarker: CREATOR_MARKER,
       ...form,
       learnerContext:
         audienceMode === "school"
           ? `Class ${grade}, ${classSize} learners. ${form.learnerContext}`
           : `${form.level}, ${classSize} learners. ${form.learnerContext}`,
-      details: `${form.details}\n\nPreset controls: target approximately ${questionCount} questions or learning checks when the artifact uses countable items; ${DIFFICULTY_OPTIONS[difficultyIndex].label.toLowerCase()} demand; ${DEPTH_OPTIONS[depthIndex].label.toLowerCase()} output depth. Treat these as design guidance, not a forced count where the chosen artifact is not item-based.`,
+      details: `${form.details}\n\nTeacher-set controls: approximately ${questionCount} countable questions or checks where relevant; ${DIFFICULTY_OPTIONS[difficultyIndex].label.toLowerCase()} cognitive demand; ${finish.label.toLowerCase()} production finish. Apply only controls that make sense for the selected artifact.`,
       addOns,
     }),
     [
       selectedWorkflow,
+      selectedRecipeId,
+      selectedRecipe,
+      artifact,
+      visualStyle,
+      interactionMode,
       form,
-      grade,
       audienceMode,
+      grade,
       classSize,
       questionCount,
       difficultyIndex,
-      depthIndex,
+      finish,
       addOns,
     ],
   );
 
   const deferredBuilderInput = useDeferredValue(builderInput);
-  const result = useMemo(
-    () => buildTeacherPrompt(deferredBuilderInput),
-    [deferredBuilderInput],
-  );
-
+  const result = useMemo(() => buildTeacherPrompt(deferredBuilderInput), [deferredBuilderInput]);
   const errors = result.issues.filter((issue) => issue.severity === "error");
-  const warnings = result.issues.filter(
-    (issue) => issue.severity === "warning",
-  );
+  const warnings = result.issues.filter((issue) => issue.severity === "warning");
 
   const visibleRecipes = useMemo(() => {
-    const filtered = STUDIO_RECIPES.filter(
-      (recipe) => recipe.category === recipeCategory,
-    );
-    return showAllRecipes ? filtered : filtered.slice(0, 6);
+    const filtered = STUDIO_RECIPES.filter((recipe) => recipe.category === recipeCategory);
+    return showAllRecipes ? filtered : filtered.slice(0, 8);
   }, [recipeCategory, showAllRecipes]);
 
   const filteredWorkflows = useMemo(() => {
     const tokens = workflowSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return WORKFLOWS.filter((workflow) => {
-      if (workflowCategory !== "All" && workflow.category !== workflowCategory) {
-        return false;
-      }
+      if (workflowCategory !== "All" && workflow.category !== workflowCategory) return false;
       if (!tokens.length) return true;
-      const haystack = [
-        workflow.title,
-        workflow.summary,
-        workflow.category,
-        ...(workflow.aliases ?? []),
-        ...workflow.taskRules,
-      ]
+      const haystack = [workflow.title, workflow.summary, workflow.category, ...(workflow.aliases ?? [])]
         .join(" ")
         .toLowerCase();
       return tokens.every((token) => haystack.includes(token));
@@ -273,115 +304,131 @@ export default function PromptStudio() {
       ...ADD_ONS.filter((item) => priority.has(item.id)),
       ...ADD_ONS.filter((item) => !priority.has(item.id)),
     ];
-    return showAllAddOns ? ordered : ordered.slice(0, 8);
+    return showAllAddOns ? ordered : ordered.slice(0, 6);
   }, [addOns, selectedRecipe, selectedWorkflow, showAllAddOns]);
+
+  const recommendedProviders = artifact.recommendedProviders
+    .map((id) => AI_PROVIDERS.find((provider) => provider.id === id))
+    .filter((provider): provider is (typeof AI_PROVIDERS)[number] => Boolean(provider));
+
+  const visibleArtifacts = useMemo(() => {
+    const recommended = ARTIFACT_PROFILES.filter((profile) =>
+      profile.id === artifactId || profile.family === artifact.family,
+    );
+    const all = unique([...recommended.map((item) => item.id), ...ARTIFACT_PROFILES.map((item) => item.id)])
+      .map((id) => getArtifactProfile(id as ArtifactId));
+    return showAllFormats
+      ? all.filter((profile) => profile.family === artifactFamily)
+      : all.slice(0, 6);
+  }, [artifact.family, artifactFamily, artifactId, showAllFormats]);
 
   const updateField =
     (field: keyof FormState) =>
-    (
-      event: ChangeEvent<
-        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-      >,
-    ) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm((current) => ({ ...current, [field]: event.target.value }));
       setCopyStatus("");
     };
 
+  const moveToStep = (step: StepId) => {
+    if (step > maxStep) return;
+    setActiveStep(step);
+    setCopyStatus("");
+  };
+
+  const advanceTo = (step: StepId) => {
+    setMaxStep((current) => Math.max(current, step) as StepId);
+    setActiveStep(step);
+  };
+
   const applyRecipe = (recipe: StudioRecipe) => {
     const workflow = WORKFLOWS.find((item) => item.id === recipe.workflowId);
     if (!workflow) return;
+    const nextArtifactId = defaultArtifactId(recipe.id, workflow.id, workflow.category);
+    const nextArtifact = getArtifactProfile(nextArtifactId);
     setSelectedRecipeId(recipe.id);
     setSelectedWorkflow(workflow);
+    setArtifactId(nextArtifactId);
+    setArtifactFamily(nextArtifact.family);
+    setSelectedProviderId(nextArtifact.recommendedProviders[0]);
     setForm((current) => ({
       ...current,
       objective: recipe.objective,
       details: recipe.details,
       powerMode: recipe.powerMode ?? "Expert",
-      outputForm:
-        recipe.category === "Assess" || recipe.id.includes("paper")
-          ? "Teacher version and learner-facing version"
-          : current.outputForm,
+      outputForm: recipe.category === "Assess" || recipe.id.includes("paper")
+        ? "Teacher version and learner-facing version"
+        : "Ready-to-use final artifact",
     }));
     setAddOns(unique([...workflow.defaultAddOns, ...recipe.addOns]));
-    setPromptView("overview");
-    setCopyStatus(`${recipe.shortTitle} recipe loaded. Your prompt is already taking shape.`);
+    setLaunched(false);
+    setFollowUpTrail([]);
+    setCopyStatus(`${recipe.shortTitle} selected. The best file format is already recommended.`);
+    advanceTo(1);
   };
 
   const chooseWorkflow = (workflow: PromptWorkflow) => {
+    const nextArtifactId = defaultArtifactId("", workflow.id, workflow.category);
+    const nextArtifact = getArtifactProfile(nextArtifactId);
     setSelectedRecipeId("");
     setSelectedWorkflow(workflow);
+    setArtifactId(nextArtifactId);
+    setArtifactFamily(nextArtifact.family);
+    setSelectedProviderId(nextArtifact.recommendedProviders[0]);
     setForm((current) => ({
       ...current,
       objective: workflow.defaultGoal,
       details: "",
+      outputForm: workflow.flags?.includes("assessment")
+        ? "Teacher version and learner-facing version"
+        : "Ready-to-use final artifact",
     }));
     setAddOns(workflow.defaultAddOns);
-    setCopyStatus(`${workflow.title} expert workflow loaded.`);
-    document.getElementById("builder")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    setCopyStatus(`${workflow.title} loaded with a real-file delivery plan.`);
+    advanceTo(1);
   };
 
   const chooseBoard = (id: string) => {
-    const resolvedId =
-      id === "icse" && grade > 10
-        ? "isc"
-        : id === "isc" && grade <= 10
-          ? "icse"
-          : id;
+    const resolvedId = id === "icse" && grade > 10
+      ? "isc"
+      : id === "isc" && grade <= 10
+        ? "icse"
+        : id;
     const board = BOARD_OPTIONS.find((item) => item.id === resolvedId);
     if (!board) return;
     setBoardId(resolvedId);
-    setForm((current) => ({
-      ...current,
-      curriculum: board.value,
-      countryRegion: "India",
-    }));
-    setCopyStatus(
-      resolvedId !== id
-        ? `${board.label} selected to match Class ${grade}.`
-        : "",
-    );
+    setForm((current) => ({ ...current, curriculum: board.value, countryRegion: "India" }));
+    setCopyStatus(resolvedId !== id ? `${board.label} selected to match ${classLabel}.` : "");
   };
 
   const chooseSubject = (subject: string) => {
     const firstTopic = TOPIC_BANK[subject]?.[0] ?? form.topic;
-    setForm((current) => ({
-      ...current,
-      subject,
-      topic: firstTopic,
-    }));
+    setForm((current) => ({ ...current, subject, topic: firstTopic }));
     setCopyStatus("");
   };
 
   const chooseLanguage = (language: string) => {
     setForm((current) => ({ ...current, outputLanguage: language }));
-    if (language !== "English") {
-      setAddOns((current) => unique([...current, "translation"]));
-    }
+    setAddOns((current) => language === "English"
+      ? current.filter((id) => id !== "translation")
+      : unique([...current, "translation"]));
     setCopyStatus("");
   };
 
-  const changeGrade = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextGrade = Number(event.target.value);
+  const chooseGrade = (nextGrade: number) => {
     setGrade(nextGrade);
     setAudienceMode("school");
-    const nextBoardId =
-      nextGrade > 10 && boardId === "icse"
-        ? "isc"
-        : nextGrade <= 10 && boardId === "isc"
-          ? "icse"
-          : boardId;
+    const nextBoardId = nextGrade > 10 && boardId === "icse"
+      ? "isc"
+      : nextGrade <= 10 && boardId === "isc"
+        ? "icse"
+        : boardId;
     const nextBoard = BOARD_OPTIONS.find((item) => item.id === nextBoardId);
     setBoardId(nextBoardId);
     setForm((current) => ({
       ...current,
       level: gradeToLevel(nextGrade),
       curriculum: nextBoard?.value ?? current.curriculum,
-      learnerContext: `Mixed-readiness class with familiar school routines`,
     }));
-    setCopyStatus("");
   };
 
   const chooseAudienceMode = (mode: AudienceMode) => {
@@ -402,61 +449,32 @@ export default function PromptStudio() {
       level: levelByMode[mode],
       learnerContext: "Mixed-readiness learners with varied prior experience",
     }));
-    setCopyStatus("");
   };
 
-  const changeClassSize = (event: ChangeEvent<HTMLInputElement>) => {
-    setClassSize(Number(event.target.value));
-    setCopyStatus("");
-  };
-
-  const changeTime = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextIndex = Number(event.target.value);
-    setTimeIndex(nextIndex);
+  const chooseFinish = (id: string) => {
+    const nextFinish = FINISH_LEVELS.find((item) => item.id === id);
+    if (!nextFinish) return;
+    setFinishId(id);
     setForm((current) => ({
       ...current,
-      duration: `${TIME_OPTIONS[nextIndex]} minutes`,
+      powerMode: DEPTH_OPTIONS[nextFinish.depthIndex].powerMode,
+      outputLength: DEPTH_OPTIONS[nextFinish.depthIndex].length,
     }));
-    setCopyStatus("");
   };
 
-  const changeDifficulty = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextIndex = Number(event.target.value);
-    setDifficultyIndex(nextIndex);
-    setForm((current) => ({
-      ...current,
-      cognitiveDemand: DIFFICULTY_OPTIONS[nextIndex].value,
-    }));
-    setCopyStatus("");
-  };
-
-  const changeDepth = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextIndex = Number(event.target.value);
-    setDepthIndex(nextIndex);
-    setForm((current) => ({
-      ...current,
-      powerMode: DEPTH_OPTIONS[nextIndex].powerMode,
-      outputLength: DEPTH_OPTIONS[nextIndex].length,
-    }));
-    setCopyStatus("");
+  const chooseArtifact = (id: ArtifactId) => {
+    const next = getArtifactProfile(id);
+    setArtifactId(id);
+    setArtifactFamily(next.family);
+    setSelectedProviderId(next.recommendedProviders[0]);
+    setLaunched(false);
+    setCopyStatus(`${next.shortLabel} selected. The file contract and quality checks changed immediately.`);
   };
 
   const toggleAddOn = (id: string) => {
-    setAddOns((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-    setCopyStatus("");
-  };
-
-  const focusIssue = (field?: keyof BuilderInput) => {
-    if (!field) return;
-    window.setTimeout(() => {
-      const target = document.getElementById(`field-${field}`);
-      target?.focus();
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 0);
+    setAddOns((current) => current.includes(id)
+      ? current.filter((item) => item !== id)
+      : [...current, id]);
   };
 
   const currentPromptResult = () => buildTeacherPrompt(builderInput);
@@ -466,106 +484,109 @@ export default function PromptStudio() {
       await navigator.clipboard.writeText(text);
       return true;
     } catch {
-      const textarea = promptRef.current;
-      if (!textarea) return false;
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("aria-hidden", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
       textarea.focus();
       textarea.select();
-      return document.execCommand("copy");
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      return copied;
     }
+  };
+
+  const focusIssue = (field?: keyof BuilderInput) => {
+    if (!field) return;
+    const expertFields = new Set<keyof BuilderInput>([
+      "objective",
+      "details",
+      "priorKnowledge",
+      "successEvidence",
+      "taskMaterial",
+      "sourceMaterial",
+      "mustAvoid",
+    ]);
+    const targetStep: StepId = expertFields.has(field) ? 2 : 1;
+    setMaxStep((current) => Math.max(current, targetStep) as StepId);
+    setActiveStep(targetStep);
+    window.setTimeout(() => {
+      if (expertFields.has(field) && expertDetailsRef.current) {
+        expertDetailsRef.current.open = true;
+      }
+      window.setTimeout(() => {
+        const target = document.getElementById(`field-${String(field)}`);
+        target?.focus();
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
+    }, 0);
+  };
+
+  const prepareProvider = (event: MouseEvent<HTMLAnchorElement>, providerName: string) => {
+    setAttemptedAction(true);
+    const current = currentPromptResult();
+    const currentErrors = current.issues.filter((issue) => issue.severity === "error");
+    if (currentErrors.length) {
+      event.preventDefault();
+      setCopyStatus("One essential classroom detail is missing. Fix it before creating the file.");
+      focusIssue(currentErrors[0].field);
+      return;
+    }
+    setLaunched(true);
+    void copyText(current.prompt).then((copied) => {
+      setCopyStatus(copied
+        ? `${providerName} opened. Paste once—the AI has exact instructions to attach ${artifact.shortLabel}, not ordinary text.`
+        : `The AI opened, but clipboard access was blocked. Use “Copy build instructions” below.`);
+    });
   };
 
   const copyPrompt = async () => {
-    setAttemptedAction(true);
-    const current = currentPromptResult();
-    const currentErrors = current.issues.filter(
-      (issue) => issue.severity === "error",
-    );
-    if (currentErrors.length) {
-      setCopyStatus("One essential detail is missing. Tap the message to fix it.");
-      focusIssue(currentErrors[0].field);
-      return;
-    }
-    const copied = await copyText(current.prompt);
-    setCopyStatus(
-      copied
-        ? "Prompt copied. Choose an AI below or paste it wherever you work."
-        : "Copy was blocked. The full prompt is selected for manual copying.",
-    );
+    const copied = await copyText(currentPromptResult().prompt);
+    setCopyStatus(copied
+      ? `Build instructions copied. They demand ${artifact.shortLabel} and reject a normal chat answer.`
+      : "Copy was blocked. The technical instructions are selected for manual copying.");
   };
 
-  const prepareProvider = (
-    event: MouseEvent<HTMLAnchorElement>,
-    providerName: string,
-  ) => {
-    setAttemptedAction(true);
-    const current = currentPromptResult();
-    const currentErrors = current.issues.filter(
-      (issue) => issue.severity === "error",
-    );
-    if (currentErrors.length) {
-      event.preventDefault();
-      setCopyStatus("Add the missing essential detail before opening an AI tool.");
-      focusIssue(currentErrors[0].field);
-      return;
+  const copyFollowUp = async (id: string) => {
+    const map: Record<string, string> = {
+      repair: "audit-repair",
+      visual: "visual",
+      adapt: "adapt-access",
+      deepen: "deepen",
+      transform: "transform",
+      share: "publish",
+    };
+    const refinement = result.refinements.find((item) => item.id === map[id]);
+    if (!refinement) return;
+    const copied = await copyText(refinement.prompt);
+    if (copied) {
+      setFollowUpTrail((current) => [...current, refinement.label]);
+      setCopyStatus(`${refinement.label} copied. Paste it in the same AI chat so the artifact, class and topic stay intact.`);
+    } else {
+      setCopyStatus("Clipboard access was blocked. Open the technical instructions to copy manually.");
     }
-
-    void copyText(current.prompt).then((copied) => {
-      setCopyStatus(
-        copied
-          ? `${providerName} opened in a new tab. Your prompt is copied—paste once to begin.`
-          : `Copy was blocked. Use Copy prompt, then open ${providerName} again.`,
-      );
-    });
-  };
-
-  const downloadPrompt = () => {
-    setAttemptedAction(true);
-    const current = currentPromptResult();
-    if (current.issues.some((issue) => issue.severity === "error")) {
-      setCopyStatus("Complete the essential details before downloading.");
-      return;
-    }
-    const blob = new Blob([current.prompt], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${selectedWorkflow.id}-teacher-prompt.txt`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    setCopyStatus("Prompt downloaded as a text file.");
-  };
-
-  const copyRefinement = async (label: string, prompt: string) => {
-    const copied = await copyText(prompt);
-    setCopyStatus(
-      copied
-        ? `${label} follow-up copied.`
-        : "Could not copy that follow-up. Open the full prompt and copy manually.",
-    );
   };
 
   const surpriseMe = () => {
     const recipe = STUDIO_RECIPES[Math.floor(Math.random() * STUDIO_RECIPES.length)];
-    const subject =
-      SUBJECT_LAUNCHERS[Math.floor(Math.random() * SUBJECT_LAUNCHERS.length)].label;
+    const subject = SUBJECT_LAUNCHERS[Math.floor(Math.random() * SUBJECT_LAUNCHERS.length)].label;
     const topicList = TOPIC_BANK[subject] ?? ["A high-value teaching topic"];
     const topic = topicList[Math.floor(Math.random() * topicList.length)];
     const nextGrade = 6 + Math.floor(Math.random() * 7);
-    const nextDifficulty = Math.floor(Math.random() * DIFFICULTY_OPTIONS.length);
-    const nextDepth = 1 + Math.floor(Math.random() * 3);
     const workflow = WORKFLOWS.find((item) => item.id === recipe.workflowId);
     if (!workflow) return;
+    const nextArtifactId = defaultArtifactId(recipe.id, workflow.id, workflow.category);
+    const nextArtifact = getArtifactProfile(nextArtifactId);
 
     setSelectedRecipeId(recipe.id);
     setSelectedWorkflow(workflow);
+    setArtifactId(nextArtifactId);
+    setArtifactFamily(nextArtifact.family);
+    setSelectedProviderId(nextArtifact.recommendedProviders[0]);
     setGrade(nextGrade);
     setAudienceMode("school");
-    setDifficultyIndex(nextDifficulty);
-    setDepthIndex(nextDepth);
     setRecipeCategory(recipe.category);
     setForm((current) => ({
       ...current,
@@ -574,929 +595,513 @@ export default function PromptStudio() {
       level: gradeToLevel(nextGrade),
       objective: recipe.objective,
       details: recipe.details,
-      cognitiveDemand: DIFFICULTY_OPTIONS[nextDifficulty].value,
-      powerMode: DEPTH_OPTIONS[nextDepth].powerMode,
-      outputLength: DEPTH_OPTIONS[nextDepth].length,
+      powerMode: recipe.powerMode ?? "Breakthrough",
     }));
     setAddOns(unique([...workflow.defaultAddOns, ...recipe.addOns]));
-    setSurpriseKey((current) => current + 1);
-    setCopyStatus(
-      `Surprise recipe: ${recipe.shortTitle} for Class ${nextGrade} ${subject}.`,
-    );
+    setCopyStatus(`Surprise: ${recipe.shortTitle} · ${nextArtifact.shortLabel} · Class ${nextGrade} ${subject}.`);
+    advanceTo(1);
   };
 
   const resetBuilder = () => {
+    setActiveStep(0);
+    setMaxStep(0);
     setSelectedWorkflow(DEFAULT_WORKFLOW);
     setSelectedRecipeId(DEFAULT_RECIPE.id);
     setRecipeCategory("Popular");
     setForm(initialForm);
     setAddOns(unique([...DEFAULT_WORKFLOW.defaultAddOns, ...DEFAULT_RECIPE.addOns]));
+    setArtifactId(DEFAULT_ARTIFACT);
+    setArtifactFamily("Print");
+    setVisualStyleId("editorial-notebook");
+    setFinishId("polished");
     setBoardId("cbse");
     setGrade(10);
     setAudienceMode("school");
     setClassSize(40);
     setTimeIndex(3);
     setDifficultyIndex(1);
-    setDepthIndex(1);
     setQuestionCount(20);
-    setPromptView("overview");
+    setLaunched(false);
+    setFollowUpTrail([]);
     setAttemptedAction(false);
-    setCopyStatus("Starter restored.");
+    setCopyStatus("Fresh studio ready.");
   };
 
-  const readinessStyle = {
-    "--readiness": `${result.score * 3.6}deg`,
-  } as CSSProperties;
+  const goNext = () => {
+    if (activeStep === 0) {
+      advanceTo(1);
+      return;
+    }
+    if (activeStep === 1 && !form.topic.trim()) {
+      setAttemptedAction(true);
+      setCopyStatus("Choose or type one chapter so the artifact cannot become generic.");
+      document.getElementById("field-topic")?.focus();
+      return;
+    }
+    if (activeStep < 3) advanceTo((activeStep + 1) as StepId);
+  };
+
+  const stepHeading = STEP_META[activeStep];
+  const nextLabel = activeStep === 0
+    ? "Next: fit my classroom"
+    : activeStep === 1
+      ? "Next: choose the real files"
+      : activeStep === 2
+        ? "Next: create the artifact"
+        : artifact.actionLabel;
 
   return (
-    <main className="command-shell">
-      <a className="skip-link" href="#builder">
-        Skip to prompt builder
-      </a>
+    <main className="maker-shell">
+      <a className="skip-link" href="#maker-workspace">Skip to artifact maker</a>
 
-      <div className="ambient-grid" aria-hidden="true" />
-      <header className="command-nav">
-        <a className="command-brand" href="#top" aria-label="Teacher Prompt Studio home">
-          <span className="brand-orbit" aria-hidden="true">
-            <i />
-            TP
-          </span>
-          <span>
-            <strong>Teacher Prompt Studio</strong>
-            <small>Indian classroom command centre</small>
-          </span>
+      <header className="maker-nav">
+        <a className="maker-brand" href="#top" aria-label="Teacher Prompt Studio home">
+          <span aria-hidden="true">TP</span>
+          <div><strong>Teacher Prompt Studio</strong><small>Artifact maker for Indian teachers</small></div>
         </a>
-        <nav aria-label="Main navigation">
-          <a href="#recipes">Recipes</a>
-          <a href="#builder">Build</a>
-          <a href="#workflow-vault">79 workflows</a>
-        </nav>
-        <div className="nav-actions">
-          <span className="privacy-pill">
-            <i aria-hidden="true" /> Nothing is sent or stored
-          </span>
-          <button type="button" className="surprise-mini" onClick={surpriseMe}>
-            <span aria-hidden="true">✦</span> Surprise me
-          </button>
+        <div className="nav-proof"><i /> Nothing is sent by this site</div>
+        <div className="nav-buttons">
+          <button type="button" onClick={surpriseMe}>✦ Surprise me</button>
+          <button type="button" onClick={resetBuilder}>Start fresh</button>
         </div>
       </header>
 
-      <section className="beast-hero" id="top" aria-labelledby="hero-title">
-        <div className="hero-radiance hero-radiance-one" aria-hidden="true" />
-        <div className="hero-radiance hero-radiance-two" aria-hidden="true" />
-        <div className="beast-hero-copy">
-          <div className="hero-badge">
-            <span>Built for India</span>
-            <i />
-            CBSE · ICSE · ISC · State · IB · Cambridge
-          </div>
-          <h1 id="hero-title">
-            From classroom idea to <em>AI-ready masterpiece</em> in under a minute.
-          </h1>
-          <p>
-            Pick an outcome. Tap your class and board. Slide the depth. The studio
-            builds the pedagogy, blueprint, safeguards, answers and quality checks
-            for you—no prompt-engineering knowledge needed.
-          </p>
-          <div className="hero-actions">
-            <a className="beast-button beast-button-primary" href="#recipes">
-              Choose a ready recipe <span aria-hidden="true">↓</span>
-            </a>
-            <button type="button" className="beast-button beast-button-ghost" onClick={surpriseMe}>
-              <span aria-hidden="true">✦</span> Generate a random mission
-            </button>
-          </div>
-          <div className="hero-trust" aria-label="Product promises">
-            <span><strong>79</strong> expert engines</span>
-            <span><strong>5</strong> quick choices</span>
-            <span><strong>0</strong> data uploaded</span>
-          </div>
-        </div>
-        <div className="hero-orbit-wrap" key={surpriseKey}>
-          <OrbitVisual recipe={selectedRecipe} />
-        </div>
-      </section>
-
-      <div className="kinetic-strip" aria-hidden="true">
+      <section className="maker-intro" id="top">
         <div>
-          <span>QUESTION PAPERS</span><i>✦</i><span>DPPs</span><i>✦</i>
-          <span>THEORY NOTES</span><i>✦</i><span>MIND MAPS</span><i>✦</i>
-          <span>FORMULA SHEETS</span><i>✦</i><span>LESSON PACKS</span><i>✦</i>
-          <span>QUESTION PAPERS</span><i>✦</i><span>DPPs</span><i>✦</i>
-          <span>THEORY NOTES</span><i>✦</i><span>MIND MAPS</span><i>✦</i>
-          <span>FORMULA SHEETS</span><i>✦</i><span>LESSON PACKS</span><i>✦</i>
+          <span className="intro-kicker">No prompt writing · no blank page · real-file instructions</span>
+          <h1>Choose it. Shape it. <em>Create the actual artifact.</em></h1>
+          <p>
+            The prompt stays backstage. You choose what the teacher needs; the studio prepares
+            exact instructions for a PDF, DOCX, image, website, flowchart, workbook or simulation.
+          </p>
         </div>
-      </div>
-
-      <section className="recipe-launcher" id="recipes" aria-labelledby="recipes-title">
-        <div className="section-heading section-heading-light">
-          <div>
-            <span className="step-chip">01 · Start with the finish</span>
-            <h2 id="recipes-title">What do you want ready today?</h2>
-            <p>
-              Every card is a complete expert recipe. Tap once and the right workflow,
-              checks, output sections and power-ups load automatically.
-            </p>
-          </div>
-          <button type="button" className="random-card-button" onClick={surpriseMe}>
-            <span aria-hidden="true">✦</span>
-            <strong>Random mission</strong>
-            <small>Let the studio surprise you</small>
-          </button>
+        <div className="intro-promise">
+          <strong>3 taps for returning teachers</strong>
+          <span>Mission → chapter → create</span>
+          <i>Saved only on this device</i>
         </div>
-
-        <div className="recipe-tabs" role="tablist" aria-label="Recipe categories">
-          {RECIPE_CATEGORIES.map((category) => (
-            <button
-              type="button"
-              key={category}
-              role="tab"
-              aria-selected={recipeCategory === category}
-              className={recipeCategory === category ? "active" : ""}
-              onClick={() => {
-                setRecipeCategory(category);
-                setShowAllRecipes(false);
-              }}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-
-        <div className="recipe-grid">
-          {visibleRecipes.map((recipe) => {
-            const selected = selectedRecipeId === recipe.id;
-            return (
-              <article
-                key={recipe.id}
-                className={`recipe-card accent-${recipe.accent} ${selected ? "selected" : ""}`}
-              >
-                <button
-                  type="button"
-                  className="recipe-select"
-                  aria-pressed={selected}
-                  onClick={() => applyRecipe(recipe)}
-                >
-                  <span className="recipe-topline">
-                    <span className="recipe-glyph">{recipe.glyph}</span>
-                    <span className="recipe-time">Saves {recipe.timeSaved}</span>
-                  </span>
-                  <strong>{recipe.shortTitle}</strong>
-                  <span className="recipe-summary">{recipe.summary}</span>
-                  <span className="recipe-deliverables">
-                    {recipe.outputs.slice(0, 3).join(" · ")}
-                  </span>
-                  <span className="recipe-cta">
-                    {selected ? "Loaded ✓" : "Build this"} <i aria-hidden="true">→</i>
-                  </span>
-                </button>
-                <details className="recipe-explanation">
-                  <summary>Why this recipe works</summary>
-                  <p>{recipe.explanation}</p>
-                </details>
-              </article>
-            );
-          })}
-        </div>
-
-        {STUDIO_RECIPES.filter((recipe) => recipe.category === recipeCategory).length > 6 && (
-          <button
-            type="button"
-            className="show-more-recipes"
-            onClick={() => setShowAllRecipes((current) => !current)}
-          >
-            {showAllRecipes ? "Show the essentials" : `Show every ${recipeCategory.toLowerCase()} recipe`}
-          </button>
-        )}
       </section>
 
-      <section className="studio-command" id="builder" aria-labelledby="builder-title">
-        <div className="command-heading">
-          <div>
-            <span className="step-chip step-chip-dark">02 · Make it yours</span>
-            <h2 id="builder-title">Your classroom command deck</h2>
-            <p>Most teachers only need the highlighted controls. Everything else is already intelligently set.</p>
-          </div>
-          <div className="journey-track" aria-label="Four-step creation journey">
-            <span className="done"><i>1</i> Outcome</span>
-            <span className="active"><i>2</i> Class</span>
-            <span><i>3</i> Tune</span>
-            <span><i>4</i> Launch</span>
-          </div>
-        </div>
-
-        <div className="command-layout">
-          <div className="control-deck">
-            <section className="control-block" aria-labelledby="classroom-fit-title">
-              <div className="control-block-heading">
-                <div>
-                  <span className="control-number">A</span>
-                  <div>
-                    <h3 id="classroom-fit-title">Fit my classroom</h3>
-                    <p>Tap your system, class and subject. The prompt rewrites itself live.</p>
-                  </div>
-                </div>
-                <HelpTip title="Classroom fit">
-                  Board, stage and subject change language, examples, workload and verification boundaries. Exact official patterns still require a current teacher-supplied blueprint.
-                </HelpTip>
-              </div>
-
-              <div className="choice-group">
-                <div className="choice-label">
-                  <span>Board or programme</span>
-                  <small>{selectedBoard?.help}</small>
-                </div>
-                <div className="choice-pills board-pills" role="radiogroup" aria-label="Board or programme">
-                  {BOARD_OPTIONS.map((board) => (
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={boardId === board.id}
-                      className={boardId === board.id ? "selected" : ""}
-                      key={board.id}
-                      onClick={() => chooseBoard(board.id)}
-                    >
-                      <i aria-hidden="true" /> {board.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="dual-sliders">
-                <SliderCard
-                  label="Learner stage"
-                  valueLabel={audienceMode === "school" ? `Class ${grade}` : form.level}
-                  note={audienceMode === "school" ? (grade <= 5 ? "Primary stage" : grade <= 8 ? "Middle stage" : grade <= 10 ? "Secondary stage" : "Senior secondary stage") : "The workflow will use age- and setting-appropriate conventions."}
-                >
-                  <input
-                    type="range"
-                    min={1}
-                    max={12}
-                    step={1}
-                    value={grade}
-                    onChange={changeGrade}
-                    aria-label="Class level"
-                  />
-                  <div className="range-ticks"><span>1</span><span>6</span><span>10</span><span>12</span></div>
-                </SliderCard>
-                <SliderCard
-                  label="Class size"
-                  valueLabel={`${classSize} learners`}
-                  note={classSize >= 45 ? "Large-class routines will be prioritised." : "Grouping and teacher attention will be planned realistically."}
-                >
-                  <input
-                    type="range"
-                    min={10}
-                    max={60}
-                    step={5}
-                    value={classSize}
-                    onChange={changeClassSize}
-                    aria-label="Class size"
-                  />
-                  <div className="range-ticks"><span>10</span><span>30</span><span>45</span><span>60</span></div>
-                </SliderCard>
-              </div>
-
-              <div className="stage-shortcuts" role="radiogroup" aria-label="Alternative learner stages">
-                <span>Beyond school?</span>
-                {([
-                  ["early", "Pre-primary"],
-                  ["undergraduate", "College"],
-                  ["vocational", "Vocational"],
-                  ["adult", "Adult learning"],
-                ] as [AudienceMode, string][]).map(([mode, label]) => (
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={audienceMode === mode}
-                    className={audienceMode === mode ? "selected" : ""}
-                    key={mode}
-                    onClick={() => chooseAudienceMode(mode)}
-                  >
-                    {label}
-                  </button>
-                ))}
-                {audienceMode !== "school" && (
-                  <button type="button" onClick={() => chooseAudienceMode("school")}>Use Class {grade}</button>
-                )}
-              </div>
-
-              <div className="choice-group">
-                <div className="choice-label">
-                  <span>Subject</span>
-                  <small>Popular Indian classroom subjects are one tap away.</small>
-                </div>
-                <div className="subject-grid" role="radiogroup" aria-label="Subject">
-                  {SUBJECT_LAUNCHERS.map((subject) => (
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={form.subject === subject.label}
-                      className={`subject-chip tone-${subject.tone} ${form.subject === subject.label ? "selected" : ""}`}
-                      key={subject.label}
-                      onClick={() => chooseSubject(subject.label)}
-                    >
-                      <span aria-hidden="true">{subject.glyph}</span>
-                      {subject.label.replace(" / literature", "").replace(" / ICT", "")}
-                    </button>
-                  ))}
-                </div>
-                <label className="compact-select">
-                  <span>Another subject</span>
-                  <select value={form.subject} onChange={updateField("subject")}>
-                    {SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}
-                  </select>
-                </label>
-                {form.subject === "Custom subject" && (
-                  <label className="topic-input custom-subject-input">
-                    <span className="sr-only">Custom subject or teaching area</span>
-                    <input
-                      id="field-customSubject"
-                      value={form.customSubject}
-                      onChange={updateField("customSubject")}
-                      aria-invalid={attemptedAction && !form.customSubject.trim()}
-                      placeholder="Type your subject or teaching area…"
-                    />
-                  </label>
-                )}
-              </div>
-
-              <div className="topic-builder">
-                <div className="choice-label">
-                  <span>Chapter or topic</span>
-                  <small>Pick a suggestion or type the one thing only you know.</small>
-                </div>
-                <div className="topic-chips">
-                  {topicSuggestions.slice(0, 6).map((topic) => (
-                    <button
-                      type="button"
-                      key={topic}
-                      className={form.topic === topic ? "selected" : ""}
-                      aria-pressed={form.topic === topic}
-                      onClick={() => setForm((current) => ({ ...current, topic }))}
-                    >
-                      {topic}
-                    </button>
-                  ))}
-                </div>
-                <label className="topic-input">
-                  <span className="sr-only">Custom topic or chapter</span>
-                  <input
-                    id="field-topic"
-                    value={form.topic}
-                    onChange={updateField("topic")}
-                    aria-invalid={attemptedAction && !form.topic.trim()}
-                    placeholder="Type a different chapter or topic…"
-                  />
-                  <span aria-hidden="true">↵</span>
-                </label>
-              </div>
-
-              <div className="choice-group language-group">
-                <div className="choice-label">
-                  <span>Output language</span>
-                  <small>Bilingual mode preserves technical terms and notation.</small>
-                </div>
-                <div className="choice-pills language-pills" role="radiogroup" aria-label="Output language">
-                  {LANGUAGE_OPTIONS.map((language) => (
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={form.outputLanguage === language}
-                      className={form.outputLanguage === language ? "selected" : ""}
-                      key={language}
-                      onClick={() => chooseLanguage(language)}
-                    >
-                      {language}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <section className="control-block" aria-labelledby="tune-title">
-              <div className="control-block-heading">
-                <div>
-                  <span className="control-number">B</span>
-                  <div>
-                    <h3 id="tune-title">Tune the intelligence</h3>
-                    <p>Move a slider. The prompt architecture—not just the word count—changes.</p>
-                  </div>
-                </div>
-                <HelpTip title="Intelligence controls">
-                  These controls shape cognitive demand, feasibility and how deeply the AI diagnoses, compares and verifies its own result.
-                </HelpTip>
-              </div>
-
-              <div className="tuning-grid">
-                <SliderCard
-                  label="Time available"
-                  valueLabel={`${TIME_OPTIONS[timeIndex]} min`}
-                  note="The studio protects the essential learning when time is tight."
-                >
-                  <input
-                    type="range"
-                    min={0}
-                    max={TIME_OPTIONS.length - 1}
-                    step={1}
-                    value={timeIndex}
-                    onChange={changeTime}
-                    aria-label="Time available"
-                  />
-                  <div className="range-ticks"><span>15</span><span>40</span><span>60</span><span>90</span></div>
-                </SliderCard>
-                <SliderCard
-                  label="Thinking level"
-                  valueLabel={DIFFICULTY_OPTIONS[difficultyIndex].label}
-                  note={DIFFICULTY_OPTIONS[difficultyIndex].note}
-                >
-                  <input
-                    type="range"
-                    min={0}
-                    max={DIFFICULTY_OPTIONS.length - 1}
-                    step={1}
-                    value={difficultyIndex}
-                    onChange={changeDifficulty}
-                    aria-label="Thinking level"
-                  />
-                  <div className="range-ticks"><span>Build</span><span>Explain</span><span>Apply</span><span>Transfer</span></div>
-                </SliderCard>
-                <SliderCard
-                  label="Prompt power"
-                  valueLabel={DEPTH_OPTIONS[depthIndex].label}
-                  note={DEPTH_OPTIONS[depthIndex].note}
-                >
-                  <input
-                    type="range"
-                    min={0}
-                    max={DEPTH_OPTIONS.length - 1}
-                    step={1}
-                    value={depthIndex}
-                    onChange={changeDepth}
-                    aria-label="Prompt power"
-                  />
-                  <div className="range-ticks"><span>Fast</span><span>Ready</span><span>Deep</span><span>Beast</span></div>
-                </SliderCard>
-                <SliderCard
-                  label="Practice volume"
-                  valueLabel={`${questionCount} items`}
-                  note="Used where the selected outcome contains countable questions or checks."
-                >
-                  <input
-                    type="range"
-                    min={5}
-                    max={50}
-                    step={5}
-                    value={questionCount}
-                    onChange={(event) => setQuestionCount(Number(event.target.value))}
-                    aria-label="Approximate question or learning-check count"
-                  />
-                  <div className="range-ticks"><span>5</span><span>20</span><span>35</span><span>50</span></div>
-                </SliderCard>
-              </div>
-            </section>
-
-            <section className="control-block" aria-labelledby="powerups-title">
-              <div className="control-block-heading">
-                <div>
-                  <span className="control-number">C</span>
-                  <div>
-                    <h3 id="powerups-title">Add classroom superpowers</h3>
-                    <p>Recommended boosts are already selected for this outcome.</p>
-                  </div>
-                </div>
-                <HelpTip title="Power-ups">
-                  Every selected boost adds both an instruction and a required output section, so it cannot disappear inside a vague prompt.
-                </HelpTip>
-              </div>
-              <div className="powerup-grid">
-                {recommendedAddOns.map((item) => {
-                  const selected = addOns.includes(item.id);
-                  return (
-                    <button
-                      type="button"
-                      className={selected ? "selected" : ""}
-                      aria-pressed={selected}
-                      key={item.id}
-                      onClick={() => toggleAddOn(item.id)}
-                    >
-                      <span aria-hidden="true">{selected ? "✓" : "+"}</span>
-                      <strong>{item.label}</strong>
-                      <small>{item.outputSection}</small>
-                    </button>
-                  );
-                })}
-              </div>
+      <section className="maker-app" id="maker-workspace" aria-label="Artifact maker">
+        <nav className="step-rail" aria-label="Creation steps">
+          {STEP_META.map((step) => {
+            const unlocked = step.id <= maxStep;
+            const complete = step.id < activeStep || (step.id < maxStep && step.id !== activeStep);
+            return (
               <button
                 type="button"
-                className="all-powerups"
-                onClick={() => setShowAllAddOns((current) => !current)}
+                key={step.id}
+                disabled={!unlocked}
+                className={`${step.id === activeStep ? "active" : ""} ${complete ? "complete" : ""}`}
+                aria-current={step.id === activeStep ? "step" : undefined}
+                onClick={() => moveToStep(step.id)}
               >
-                {showAllAddOns ? "Show recommended boosts" : `Explore all ${ADD_ONS.length} superpowers`}
+                <i>{complete ? "✓" : step.id + 1}</i>
+                <span><strong>{step.label}</strong><small>{step.short}</small></span>
               </button>
-            </section>
+            );
+          })}
+        </nav>
 
-            <details className="blueprint-lab" open={selectedWorkflow.sourcePolicy === "required"}>
-              <summary>
-                <span>
-                  <i aria-hidden="true">＋</i>
-                  <strong>Open the expert blueprint</strong>
-                  <small>Optional goals, exact source material, pedagogy and constraints</small>
-                </span>
-                <span>{selectedWorkflow.sourcePolicy === "required" ? "Material needed" : "Only when you need precision"}</span>
-              </summary>
-              <div className="blueprint-content">
-                <div className="blueprint-intro">
-                  <strong>Nothing here is required for a normal classroom prompt.</strong>
-                  <p>Use this layer for high-stakes papers, source transformation, exact policies or a very specific teaching design.</p>
-                </div>
-                <div className="advanced-grid">
-                  <label className="advanced-field advanced-wide">
-                    <span>Exact goal</span>
-                    <textarea
-                      id="field-objective"
-                      rows={3}
-                      value={form.objective}
-                      onChange={updateField("objective")}
-                      aria-invalid={attemptedAction && !form.objective.trim()}
-                    />
-                  </label>
-                  <label className="advanced-field advanced-wide">
-                    <span>Non-negotiables or preferred approach</span>
-                    <textarea id="field-details" rows={3} value={form.details} onChange={updateField("details")} />
-                  </label>
-                  <label className="advanced-field">
-                    <span>Pedagogical lens</span>
-                    <select value={form.pedagogyLens} onChange={updateField("pedagogyLens")}>
-                      {PEDAGOGY_LENSES.map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </label>
-                  <label className="advanced-field">
-                    <span>Cognitive demand</span>
-                    <select value={form.cognitiveDemand} onChange={updateField("cognitiveDemand")}>
-                      {COGNITIVE_DEMANDS.map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </label>
-                  <label className="advanced-field">
-                    <span>Learner context</span>
-                    <textarea rows={3} value={form.learnerContext} onChange={updateField("learnerContext")} />
-                  </label>
-                  <label className="advanced-field">
-                    <span>Resources and limits</span>
-                    <textarea rows={3} value={form.resourceLimits} onChange={updateField("resourceLimits")} />
-                  </label>
-                  <label className="advanced-field">
-                    <span>Prior knowledge or evidence</span>
-                    <textarea rows={3} value={form.priorKnowledge} onChange={updateField("priorKnowledge")} />
-                  </label>
-                  <label className="advanced-field">
-                    <span>What success should look like</span>
-                    <textarea rows={3} value={form.successEvidence} onChange={updateField("successEvidence")} />
-                  </label>
-                  <label className="advanced-field">
-                    <span>Output form</span>
-                    <select value={form.outputForm} onChange={updateField("outputForm")}>
-                      {OUTPUT_FORMS.map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </label>
-                  <label className="advanced-field">
-                    <span>AI collaboration style</span>
-                    <select value={form.collaborationStyle} onChange={updateField("collaborationStyle")}>
-                      {COLLABORATION_STYLES.map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </label>
-                  <label className="advanced-field advanced-wide">
-                    <span>Material to analyse or transform</span>
-                    <textarea
-                      id="field-taskMaterial"
-                      rows={6}
-                      value={form.taskMaterial}
-                      onChange={updateField("taskMaterial")}
-                      placeholder="Paste an anonymised paper, draft, student response or resource. The prompt treats it as untrusted reference data."
-                    />
-                  </label>
-                  <label className="advanced-field advanced-wide">
-                    <span>Authoritative source or current blueprint</span>
-                    <textarea
-                      id="field-sourceMaterial"
-                      rows={6}
-                      value={form.sourceMaterial}
-                      onChange={updateField("sourceMaterial")}
-                      placeholder="Paste the current syllabus extract, official blueprint, rubric or verified source when exact alignment matters."
-                    />
-                  </label>
-                  <label className="advanced-field advanced-wide">
-                    <span>Must avoid or preserve</span>
-                    <textarea rows={3} value={form.mustAvoid} onChange={updateField("mustAvoid")} />
-                  </label>
-                </div>
-              </div>
-            </details>
-
-            <div className="control-footer">
-              <button type="button" onClick={resetBuilder}>Reset starter</button>
-              <a href="#prompt-output">Jump to my prompt ↓</a>
-            </div>
-          </div>
-
-          <aside className="result-console" id="prompt-output" aria-labelledby="result-title">
-            <div className="result-sticky">
-              <div className="result-head">
-                <div>
-                  <span className="live-indicator"><i /> LIVE</span>
-                  <h3 id="result-title">Your AI mission is ready</h3>
-                  <p>{selectedRecipe?.shortTitle ?? selectedWorkflow.title} · Class {grade} · {form.subject}</p>
-                </div>
-                <div className="readiness-ring" style={readinessStyle} aria-label={`Prompt readiness ${result.score} percent`}>
-                  <div><strong>{result.score}</strong><span>ready</span></div>
-                </div>
-              </div>
-
-              <div className="result-dna" aria-label="Prompt readiness dimensions">
-                {result.readiness.map((dimension) => (
-                  <button
-                    type="button"
-                    key={dimension.id}
-                    className={dimension.ready ? "ready" : "needs-work"}
-                    onClick={() => {
-                      if (!dimension.ready) {
-                        const issue = result.issues.find((item) => item.field);
-                        focusIssue(issue?.field);
-                      }
-                    }}
-                  >
-                    <i aria-hidden="true">{dimension.ready ? "✓" : "·"}</i>
-                    {dimension.label}
-                  </button>
-                ))}
-              </div>
-
-              {(errors.length > 0 || warnings.length > 0) && (
-                <div className="result-issues" aria-live="polite">
-                  {errors.map((issue) => (
-                    <button type="button" key={issue.message} onClick={() => focusIssue(issue.field)}>
-                      <strong>Fix</strong> {issue.message}
-                    </button>
-                  ))}
-                  {warnings.slice(0, 2).map((issue) => (
-                    <button type="button" className="warning" key={issue.message} onClick={() => focusIssue(issue.field)}>
-                      <strong>Check</strong> {issue.message}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="result-tabs" role="tablist" aria-label="Prompt preview">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={promptView === "overview"}
-                  className={promptView === "overview" ? "active" : ""}
-                  onClick={() => setPromptView("overview")}
-                >
-                  Outcome preview
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={promptView === "full"}
-                  className={promptView === "full" ? "active" : ""}
-                  onClick={() => setPromptView("full")}
-                >
-                  Full expert prompt
-                </button>
-              </div>
-
-              {promptView === "overview" ? (
-                <div className="outcome-preview">
-                  <div className="mission-summary">
-                    <span>{selectedRecipe?.glyph ?? selectedWorkflow.glyph}</span>
-                    <div>
-                      <small>Current mission</small>
-                      <strong>{selectedRecipe?.title ?? selectedWorkflow.title}</strong>
-                      <p>{form.topic}</p>
-                    </div>
-                  </div>
-                  <div className="output-manifest">
-                    <div className="manifest-heading">
-                      <span>What the AI will return</span>
-                      <small>{(selectedRecipe?.outputs ?? selectedWorkflow.outputSections).length} aligned parts</small>
-                    </div>
-                    <ol>
-                      {(selectedRecipe?.outputs ?? selectedWorkflow.outputSections).map((output) => (
-                        <li key={output}><span aria-hidden="true">✓</span>{output}</li>
-                      ))}
-                    </ol>
-                  </div>
-                  <div className="architecture-preview">
-                    <span>Built into the prompt</span>
-                    <div>
-                      <i>Board boundary</i>
-                      <i>Pedagogy</i>
-                      <i>Quality gates</i>
-                      <i>Answer audit</i>
-                      <i>Teacher verification</i>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="full-prompt-wrap">
-                  <div className="prompt-meta">
-                    <span>{result.prompt.length.toLocaleString()} characters</span>
-                    <span>{selectedWorkflow.title}</span>
-                  </div>
-                  <textarea
-                    className="prompt-preview"
-                    value={result.prompt}
-                    readOnly
-                    aria-label="Generated teacher prompt"
-                    spellCheck={false}
-                  />
-                </div>
-              )}
-              <textarea
-                ref={promptRef}
-                className="clipboard-buffer"
-                value={result.prompt}
-                readOnly
-                aria-hidden="true"
-                tabIndex={-1}
-              />
-              <pre className="print-prompt" aria-hidden="true">{result.prompt}</pre>
-
-              <div className="primary-result-actions">
-                <button type="button" className="copy-master" onClick={copyPrompt}>
-                  <span>
-                    <strong>Copy expert prompt</strong>
-                    <small>Ready for any capable AI</small>
-                  </span>
-                  <i aria-hidden="true">⧉</i>
-                </button>
-                <button type="button" onClick={downloadPrompt} aria-label="Download prompt as text file">
-                  <span aria-hidden="true">↓</span><small>Download</small>
-                </button>
-                <button type="button" onClick={() => window.print()} aria-label="Print or save prompt as PDF">
-                  <span aria-hidden="true">▤</span><small>PDF</small>
-                </button>
-              </div>
-
-              <p className="copy-status" aria-live="polite" role="status">
-                {copyStatus || "Every tap updates this mission immediately."}
+        <div className="maker-body">
+          <section className="decision-panel" aria-labelledby="step-title">
+            <div className="decision-heading">
+              <span>Step {activeStep + 1} of 4 · {stepHeading.label}</span>
+              <h2 id="step-title" tabIndex={-1} ref={stepHeadingRef}>{stepHeading.description}</h2>
+              <p>
+                {activeStep === 0 && "Tap one outcome. Its expert method, file type and quality checks load automatically."}
+                {activeStep === 1 && "Tell us only what changes the classroom result. Your usual profile is remembered on this device."}
+                {activeStep === 2 && "Choose how it should arrive. Every option demands a real artifact—not a normal chat answer."}
+                {activeStep === 3 && "Open an AI, paste once, and receive the requested files. Then use the visual follow-up path."}
               </p>
+            </div>
 
-              <div className="ai-launch-dock">
-                <div className="launch-heading">
-                  <span>Launch in your favourite AI</span>
-                  <small>One click copies the prompt and opens a fresh chat.</small>
-                </div>
-                <div className="provider-grid">
-                  {AI_PROVIDERS.map((provider) => (
-                    <a
-                      key={provider.id}
-                      href={provider.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(event) => prepareProvider(event, provider.name)}
-                      title={provider.note}
-                    >
-                      <span className={`provider-glyph provider-${provider.id}`}>{provider.glyph}</span>
-                      <strong>{provider.name}</strong>
-                      <i aria-hidden="true">↗</i>
-                    </a>
-                  ))}
-                </div>
-                <p>
-                  Your prompt is copied on this device; it is not placed inside the provider URL.
-                  Review it and remove learner names or confidential details before sending.
-                </p>
-              </div>
-
-              <details className="refinement-pack">
-                <summary>
-                  <span><strong>Improve the AI&apos;s result</strong><small>Six follow-up moves without starting over</small></span>
-                  <i aria-hidden="true">＋</i>
-                </summary>
-                <div className="refinement-grid">
-                  {result.refinements.map((refinement) => (
+            {activeStep === 0 && (
+              <div className="step-content outcome-step">
+                <div className="recipe-tabs" role="tablist" aria-label="Teaching outcome categories">
+                  {RECIPE_CATEGORIES.map((category) => (
                     <button
                       type="button"
-                      key={refinement.id}
-                      onClick={() => copyRefinement(refinement.label, refinement.prompt)}
+                      key={category}
+                      role="tab"
+                      aria-selected={recipeCategory === category}
+                      className={recipeCategory === category ? "active" : ""}
+                      onClick={() => { setRecipeCategory(category); setShowAllRecipes(false); }}
                     >
-                      <strong>{refinement.label}</strong>
-                      <span>{refinement.description}</span>
+                      {category}
                     </button>
                   ))}
                 </div>
-              </details>
+                <div className="outcome-grid">
+                  {visibleRecipes.map((recipe) => {
+                    const workflow = WORKFLOWS.find((item) => item.id === recipe.workflowId) ?? DEFAULT_WORKFLOW;
+                    const recipeArtifact = getArtifactProfile(defaultArtifactId(recipe.id, workflow.id, workflow.category));
+                    const selected = selectedRecipeId === recipe.id;
+                    return (
+                      <button
+                        type="button"
+                        key={recipe.id}
+                        className={`outcome-card accent-${recipe.accent} ${selected ? "selected" : ""}`}
+                        aria-pressed={selected}
+                        onClick={() => applyRecipe(recipe)}
+                      >
+                        <span className="outcome-top"><i>{recipe.glyph}</i><small>Saves {recipe.timeSaved}</small></span>
+                        <strong>{recipe.shortTitle}</strong>
+                        <p>{recipe.summary}</p>
+                        <span className="file-promise"><b>{recipeArtifact.glyph}</b>{recipeArtifact.shortLabel}</span>
+                        <em>{selected ? "Selected ✓" : "Choose and continue →"}</em>
+                      </button>
+                    );
+                  })}
+                </div>
+                {STUDIO_RECIPES.filter((recipe) => recipe.category === recipeCategory).length > 8 && (
+                  <button type="button" className="quiet-button" onClick={() => setShowAllRecipes((current) => !current)}>
+                    {showAllRecipes ? "Show essentials" : `Show every ${recipeCategory.toLowerCase()} outcome`}
+                  </button>
+                )}
+
+                <details className="mission-vault">
+                  <summary><span><strong>Need something else?</strong><small>Search all {WORKFLOWS.length} expert teacher missions</small></span><i>＋</i></summary>
+                  <div className="vault-content">
+                    <label className="vault-search">
+                      <span aria-hidden="true">⌕</span>
+                      <input type="search" value={workflowSearch} onChange={(event) => setWorkflowSearch(event.target.value)} placeholder="Try rubric, JEE, experiment, report, parent…" />
+                    </label>
+                    <div className="vault-filters">
+                      {(["All", ...WORKFLOW_CATEGORIES] as CategoryFilter[]).map((category) => (
+                        <button type="button" key={category} className={workflowCategory === category ? "active" : ""} onClick={() => setWorkflowCategory(category)}>{category}</button>
+                      ))}
+                    </div>
+                    <p className="vault-result">{filteredWorkflows.length} missions · {workflowCategory === "All" ? "complete teaching cycle" : CATEGORY_META[workflowCategory].short}</p>
+                    <div className="vault-list">
+                      {filteredWorkflows.slice(0, workflowSearch ? 18 : 10).map((workflow) => (
+                        <button type="button" onClick={() => chooseWorkflow(workflow)} key={workflow.id}>
+                          <i>{workflow.glyph}</i><span><strong>{workflow.title}</strong><small>{workflow.summary}</small></span><b>→</b>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {activeStep === 1 && (
+              <div className="step-content classroom-step">
+                <div className="saved-profile">
+                  <span><i>✓</i><strong>{profileLoaded ? "Your saved classroom" : "Your classroom starter"}</strong></span>
+                  <p>{selectedBoard.label} · {classLabel} · {form.subject} · {form.outputLanguage}</p>
+                  <small>These preferences stay on this device and can be changed below.</small>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Board or programme</span><Insight>{selectedBoard.help}</Insight></div>
+                  <div className="chip-grid board-grid" role="radiogroup" aria-label="Board or programme">
+                    {BOARD_OPTIONS.map((board) => (
+                      <button type="button" role="radio" aria-checked={boardId === board.id} className={boardId === board.id ? "selected" : ""} onClick={() => chooseBoard(board.id)} key={board.id}>
+                        <i aria-hidden="true" />{board.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Learner stage</span><small>{classLabel}</small></div>
+                  <div className="class-grid" role="radiogroup" aria-label="Class level">
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((item) => (
+                      <button type="button" role="radio" aria-checked={audienceMode === "school" && grade === item} className={audienceMode === "school" && grade === item ? "selected" : ""} onClick={() => chooseGrade(item)} key={item}>{item}</button>
+                    ))}
+                  </div>
+                  <div className="stage-alternatives" id="field-customLevel" tabIndex={-1}>
+                    <span>Beyond school</span>
+                    {([
+                      ["early", "Pre-primary"],
+                      ["undergraduate", "College"],
+                      ["vocational", "Vocational"],
+                      ["adult", "Adult learning"],
+                    ] as [AudienceMode, string][]).map(([mode, label]) => (
+                      <button type="button" className={audienceMode === mode ? "selected" : ""} onClick={() => chooseAudienceMode(mode)} key={mode}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Subject</span><small>One tap changes the chapter suggestions</small></div>
+                  <div className="subject-grid" role="radiogroup" aria-label="Subject">
+                    {SUBJECT_LAUNCHERS.map((subject) => (
+                      <button type="button" role="radio" aria-checked={form.subject === subject.label} className={form.subject === subject.label ? "selected" : ""} onClick={() => chooseSubject(subject.label)} key={subject.label}>
+                        <i>{subject.glyph}</i><span>{subject.label.replace(" / literature", "").replace(" / ICT", "")}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="compact-select"><span>Another subject</span><select value={form.subject} onChange={updateField("subject")}>{SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
+                  {form.subject === "Custom subject" && (
+                    <label className="wide-input"><span>Your subject</span><input id="field-customSubject" value={form.customSubject} onChange={updateField("customSubject")} placeholder="Type the teaching area…" /></label>
+                  )}
+                </div>
+
+                <div className="choice-section topic-section">
+                  <div className="choice-heading"><span>Chapter or topic</span><small>This is the only detail teachers may need to type</small></div>
+                  <div className="topic-chips">
+                    {topicSuggestions.slice(0, 6).map((topic) => (
+                      <button type="button" key={topic} className={form.topic === topic ? "selected" : ""} onClick={() => setForm((current) => ({ ...current, topic }))}>{topic}</button>
+                    ))}
+                  </div>
+                  <label className="wide-input topic-input"><span>Use another chapter</span><input id="field-topic" value={form.topic} onChange={updateField("topic")} aria-invalid={attemptedAction && !form.topic.trim()} placeholder="Type a different chapter or topic…" /></label>
+                </div>
+
+                <div className="choice-pair">
+                  <div className="choice-section">
+                    <div className="choice-heading"><span>Language</span></div>
+                    <div className="language-grid" id="field-outputLanguage" role="radiogroup" aria-label="Output language" tabIndex={-1}>
+                      {LANGUAGE_OPTIONS.map((language) => (
+                        <button type="button" role="radio" aria-checked={form.outputLanguage === language} className={form.outputLanguage === language ? "selected" : ""} onClick={() => chooseLanguage(language)} key={language}>{language}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="choice-section compact-control">
+                    <div className="choice-heading"><span>Class size</span><strong>{classSize} learners</strong></div>
+                    <input type="range" min="10" max="60" step="5" value={classSize} onChange={(event) => setClassSize(Number(event.target.value))} aria-label="Class size" />
+                    <p>{classSize >= 45 ? "Large-class routines and low-friction checks will be prioritised." : "Grouping and teacher attention will stay realistic."}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeStep === 2 && (
+              <div className="step-content finish-step">
+                <div className="recommended-format">
+                  <span>Recommended for {selectedRecipe?.shortTitle ?? selectedWorkflow.title}</span>
+                  <strong>{artifact.label}</strong>
+                  <p>{artifact.promise}</p>
+                  <div>{artifact.formats.map((format) => <i key={format}>{format}</i>)}</div>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Choose the actual deliverable</span><Insight>Every option has its own layout, accessibility, interaction and file-quality rules.</Insight></div>
+                  {showAllFormats && (
+                    <div className="format-families" role="tablist" aria-label="Artifact families">
+                      {ARTIFACT_FAMILIES.map((family) => <button type="button" role="tab" aria-selected={artifactFamily === family} className={artifactFamily === family ? "active" : ""} onClick={() => setArtifactFamily(family)} key={family}>{family}</button>)}
+                    </div>
+                  )}
+                  <div className="format-grid">
+                    {visibleArtifacts.map((profile) => (
+                      <button type="button" className={artifactId === profile.id ? "selected" : ""} onClick={() => chooseArtifact(profile.id)} key={profile.id}>
+                        <i>{profile.glyph}</i>
+                        <span><strong>{profile.shortLabel}</strong><small>{profile.promise}</small></span>
+                        <em>{profile.formats.join(" · ")}</em>
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="quiet-button" onClick={() => setShowAllFormats((current) => !current)}>{showAllFormats ? "Show recommended formats" : `Explore all ${ARTIFACT_PROFILES.length} artifact types`}</button>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Finish level</span><small>Simple teacher language; deep architecture underneath</small></div>
+                  <div className="finish-grid" role="radiogroup" aria-label="Finish level">
+                    {FINISH_LEVELS.map((item) => (
+                      <button type="button" role="radio" aria-checked={finishId === item.id} className={finishId === item.id ? "selected" : ""} onClick={() => chooseFinish(item.id)} key={item.id}>
+                        <span>{item.id === "ready" ? "01" : item.id === "polished" ? "02" : "03"}</span><strong>{item.label}</strong><p>{item.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Visual direction</span><small>Topic-derived, never decorative filler</small></div>
+                  <div className="style-grid" role="radiogroup" aria-label="Visual direction">
+                    {VISUAL_STYLES.map((style) => (
+                      <button type="button" role="radio" aria-checked={visualStyleId === style.id} className={`${visualStyleId === style.id ? "selected" : ""} style-${style.id}`} onClick={() => setVisualStyleId(style.id)} key={style.id}>
+                        <i aria-hidden="true"><b /><b /><b /></i><span><strong>{style.label}</strong><small>{style.description}</small></span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="smart-controls">
+                  <div className="smart-control">
+                    <span><strong>{selectedWorkflow.flags?.includes("assessment") ? "Paper duration" : "Classroom time"}</strong><i>{TIME_OPTIONS[timeIndex]} min</i></span>
+                    <input type="range" min="0" max={TIME_OPTIONS.length - 1} step="1" value={timeIndex} aria-label={selectedWorkflow.flags?.includes("assessment") ? "Paper duration" : "Classroom time"} onChange={(event) => { const index = Number(event.target.value); setTimeIndex(index); setForm((current) => ({ ...current, duration: `${TIME_OPTIONS[index]} minutes` })); }} />
+                    <p>The artifact protects the essentials when time is tight.</p>
+                  </div>
+                  <div className="smart-control">
+                    <span><strong>Thinking demand</strong><i>{DIFFICULTY_OPTIONS[difficultyIndex].label}</i></span>
+                    <input type="range" min="0" max={DIFFICULTY_OPTIONS.length - 1} step="1" value={difficultyIndex} aria-label="Thinking demand" onChange={(event) => { const index = Number(event.target.value); setDifficultyIndex(index); setForm((current) => ({ ...current, cognitiveDemand: DIFFICULTY_OPTIONS[index].value })); }} />
+                    <p>{DIFFICULTY_OPTIONS[difficultyIndex].note}</p>
+                  </div>
+                  {(selectedWorkflow.flags?.includes("assessment") || artifactId === "worksheet-bundle") && (
+                    <div className="smart-control">
+                      <span><strong>Question volume</strong><i>{questionCount} items</i></span>
+                      <input type="range" min="5" max="50" step="5" value={questionCount} aria-label="Question volume" onChange={(event) => setQuestionCount(Number(event.target.value))} />
+                      <p>Counts apply only where the artifact contains questions or checks.</p>
+                    </div>
+                  )}
+                  {artifact.interactive && (
+                    <div className="smart-control interaction-control">
+                      <span><strong>Interaction style</strong><i>Choose one</i></span>
+                      <div>
+                        {[
+                          "Guided exploration with meaningful feedback, clear progress and a reset path",
+                          "Open exploration with visible variables, model assumptions and a reflection trail",
+                          "Challenge mode with adaptive hints, multiple attempts and evidence-based feedback",
+                        ].map((mode, index) => (
+                          <button type="button" className={interactionMode === mode ? "selected" : ""} onClick={() => setInteractionMode(mode)} key={mode}>{["Guided", "Explore", "Challenge"][index]}</button>
+                        ))}
+                      </div>
+                      <p>No fake buttons: every interaction must change understanding, evidence or feedback.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="choice-section">
+                  <div className="choice-heading"><span>Useful extras</span><small>Recommended ones are already on</small></div>
+                  <div className="power-grid">
+                    {recommendedAddOns.map((item) => {
+                      const selected = addOns.includes(item.id);
+                      return <button type="button" className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleAddOn(item.id)} key={item.id}><i>{selected ? "✓" : "+"}</i><span><strong>{item.label}</strong><small>{item.outputSection}</small></span></button>;
+                    })}
+                  </div>
+                  <button type="button" className="quiet-button" onClick={() => setShowAllAddOns((current) => !current)}>{showAllAddOns ? "Show recommended extras" : `Show all ${ADD_ONS.length} extras`}</button>
+                </div>
+
+                <details className="expert-settings" ref={expertDetailsRef}>
+                  <summary><span><strong>Optional expert details</strong><small>Exact material, goals and boundaries only when they matter</small></span><i>＋</i></summary>
+                  <div className="expert-grid">
+                    <label><span>Exact goal</span><textarea id="field-objective" rows={3} value={form.objective} onChange={updateField("objective")} /></label>
+                    <label><span>Non-negotiables</span><textarea id="field-details" rows={3} value={form.details} onChange={updateField("details")} /></label>
+                    <label><span>Prior knowledge</span><textarea id="field-priorKnowledge" rows={3} value={form.priorKnowledge} onChange={updateField("priorKnowledge")} /></label>
+                    <label><span>Success evidence</span><textarea id="field-successEvidence" rows={3} value={form.successEvidence} onChange={updateField("successEvidence")} /></label>
+                    <label className="wide"><span>Material to transform</span><textarea id="field-taskMaterial" rows={5} value={form.taskMaterial} onChange={updateField("taskMaterial")} placeholder="Paste an anonymised paper, draft, learner response or resource…" /></label>
+                    <label className="wide"><span>Authoritative source or blueprint</span><textarea id="field-sourceMaterial" rows={5} value={form.sourceMaterial} onChange={updateField("sourceMaterial")} placeholder="Paste the current syllabus extract, verified blueprint or rubric…" /></label>
+                    <label className="wide"><span>Must avoid or preserve</span><textarea id="field-mustAvoid" rows={3} value={form.mustAvoid} onChange={updateField("mustAvoid")} /></label>
+                  </div>
+                </details>
+              </div>
+            )}
+
+            {activeStep === 3 && (
+              <div className="step-content launch-step">
+                <div className="launch-receipt">
+                  <span>Ready to build</span>
+                  <h3>{classLabel} {form.topic} · {artifact.shortLabel}</h3>
+                  <p>{artifact.promise}</p>
+                  <div className="receipt-files">
+                    {result.artifactManifest.map((file) => <span key={`${file.label}-${file.format}`}><i>{file.format}</i><strong>{file.label}</strong></span>)}
+                  </div>
+                  <ul>
+                    <li>Rejects a normal text answer</li>
+                    <li>Runs a topic-substitution test</li>
+                    <li>Checks files before returning</li>
+                    <li>Embeds your creator mark in metadata</li>
+                  </ul>
+                </div>
+
+                {(errors.length > 0 || warnings.length > 0) && (
+                  <div className="launch-issues" aria-live="polite">
+                    {errors.map((issue) => <button type="button" onClick={() => focusIssue(issue.field)} key={issue.message}><strong>Fix first</strong>{issue.message}</button>)}
+                    {warnings.slice(0, 2).map((issue) => <button type="button" className="warning" onClick={() => focusIssue(issue.field)} key={issue.message}><strong>Helpful check</strong>{issue.message}</button>)}
+                  </div>
+                )}
+
+                <div className="provider-choice">
+                  <div className="choice-heading"><span>Choose where to create it</span><small>Best matches for this artifact appear first</small></div>
+                  <div className="provider-cards" role="radiogroup" aria-label="AI provider">
+                    {recommendedProviders.map((provider, index) => (
+                      <button type="button" role="radio" aria-checked={selectedProviderId === provider.id} className={selectedProviderId === provider.id ? "selected" : ""} onClick={() => setSelectedProviderId(provider.id)} key={provider.id}>
+                        <i>{provider.glyph}</i><span><strong>{provider.name}</strong><small>{index === 0 ? "Best match for this file" : "Also works well"}</small></span><b>{selectedProviderId === provider.id ? "✓" : ""}</b>
+                      </button>
+                    ))}
+                  </div>
+                  <a className="create-artifact-button" href={selectedProvider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, selectedProvider.name)}>
+                    <span><strong>{artifact.actionLabel} in {selectedProvider.name}</strong><small>Copies the build instructions and opens a fresh chat</small></span><i>↗</i>
+                  </a>
+                  <p className="handoff-note">Paste once in the new chat. The AI is told to attach the requested files; provider file capabilities may vary.</p>
+                  <details className="all-providers">
+                    <summary>Choose another AI</summary>
+                    <div>{AI_PROVIDERS.map((provider) => <a href={provider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, provider.name)} key={provider.id}><i>{provider.glyph}</i>{provider.name}<b>↗</b></a>)}</div>
+                  </details>
+                </div>
+
+                <div className={`followup-map ${launched ? "active" : ""}`}>
+                  <div className="followup-heading">
+                    <span>{launched ? "AI opened · stay in the same chat" : "After the AI returns your file"}</span>
+                    <h3>What should happen next?</h3>
+                    <p>Tap the problem you see. The right follow-up is copied without losing your class, topic, format or creator mark.</p>
+                  </div>
+                  <div className="flow-spine" aria-label="Artifact improvement flow">
+                    <span className="complete"><i>1</i>Choose</span><b>→</b>
+                    <span className="complete"><i>2</i>Build</span><b>→</b>
+                    <span className={launched ? "current" : ""}><i>3</i>Check</span><b>→</b>
+                    <span><i>4</i>Improve</span><b>→</b>
+                    <span><i>5</i>Share</span>
+                  </div>
+                  <div className="followup-grid">
+                    {FOLLOW_UP_PATHS.map((path) => (
+                      <button type="button" className={`followup-${path.accent}`} onClick={() => copyFollowUp(path.id)} key={path.id}>
+                        <small>{path.question}</small><strong>{path.label}</strong><span>{path.description}</span><i>Copy same-chat move →</i>
+                      </button>
+                    ))}
+                  </div>
+                  {followUpTrail.length > 0 && (
+                    <div className="followup-trail" aria-live="polite"><span>Your improvement trail</span>{followUpTrail.map((item, index) => <i key={`${item}-${index}`}>{index + 1}. {item}</i>)}<button type="button" onClick={() => setFollowUpTrail((current) => current.slice(0, -1))}>Undo last</button></div>
+                  )}
+                </div>
+
+                <details className="technical-prompt">
+                  <summary><span><strong>Advanced · inspect build instructions</strong><small>The teacher never needs to edit this</small></span><i>＋</i></summary>
+                  <div>
+                    <p>{result.prompt.length.toLocaleString()} characters · hidden creator marker included · file-delivery contract active</p>
+                    <textarea value={result.prompt} readOnly aria-label="Generated artifact build instructions" spellCheck={false} />
+                    <button type="button" onClick={copyPrompt}>Copy build instructions</button>
+                  </div>
+                </details>
+              </div>
+            )}
+
+          </section>
+
+          <aside className="blueprint-panel">
+            <ArtifactStage
+              artifact={artifact}
+              mission={selectedRecipe?.title ?? selectedWorkflow.title}
+              topic={form.topic}
+              subject={form.subject}
+              classLabel={classLabel}
+              board={selectedBoard.label}
+            />
+            <div className="confidence-card">
+              <div><span>Artifact confidence</span><strong>{result.score}%</strong></div>
+              <i><b style={{ width: `${result.score}%` }} /></i>
+              <p>{result.status}. {errors.length ? "One essential detail needs attention." : warnings.length ? "Ready with a helpful verification note." : "Ready for file creation."}</p>
+            </div>
+            <div className="blueprint-summary">
+              <span>Built into every mission</span>
+              <ul><li>Real-file delivery contract</li><li>Topic-specific originality test</li><li>Indian classroom constraints</li><li>Production and answer audit</li><li>Metadata-only creator signature</li></ul>
             </div>
           </aside>
         </div>
-      </section>
 
-      <section className="workflow-vault" id="workflow-vault" aria-labelledby="vault-title">
-        <div className="vault-heading">
-          <div>
-            <span className="step-chip">03 · Go beyond the presets</span>
-            <h2 id="vault-title">The 79-engine teacher vault</h2>
-            <p>Every teaching job has its own method and quality gates. Search in normal teacher language.</p>
-          </div>
-          <div className="vault-count"><strong>{WORKFLOWS.length}</strong><span>specialist workflows</span></div>
-        </div>
-        <div className="vault-controls">
-          <label>
-            <span aria-hidden="true">⌕</span>
-            <input
-              type="search"
-              value={workflowSearch}
-              onChange={(event) => setWorkflowSearch(event.target.value)}
-              placeholder="Try paper, DPP, rubric, JEE, parent message…"
-              aria-label="Search all teaching workflows"
-            />
-          </label>
-          <div className="vault-categories" aria-label="Workflow categories">
-            {(["All", ...WORKFLOW_CATEGORIES] as CategoryFilter[]).map((category) => (
-              <button
-                type="button"
-                key={category}
-                aria-pressed={workflowCategory === category}
-                className={workflowCategory === category ? "selected" : ""}
-                onClick={() => setWorkflowCategory(category)}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="vault-result-line" aria-live="polite">
-          <span>{filteredWorkflows.length} workflows found</span>
-          <span>{workflowCategory === "All" ? "Across the full teaching cycle" : CATEGORY_META[workflowCategory].short}</span>
-        </div>
-        <div className="vault-grid">
-          {filteredWorkflows.map((workflow) => (
-            <button
-              type="button"
-              key={workflow.id}
-              className={selectedWorkflow.id === workflow.id ? "selected" : ""}
-              aria-pressed={selectedWorkflow.id === workflow.id}
-              onClick={() => chooseWorkflow(workflow)}
-            >
-              <span>{workflow.glyph}</span>
-              <div>
-                <small>{workflow.category}</small>
-                <strong>{workflow.title}</strong>
-                <p>{workflow.summary}</p>
-              </div>
-              <i aria-hidden="true">→</i>
-            </button>
-          ))}
+        <div className="maker-actions">
+          <button type="button" className="back-button" onClick={() => moveToStep(Math.max(0, activeStep - 1) as StepId)} disabled={activeStep === 0}>← Back</button>
+          <p aria-live="polite" role="status">{copyStatus || `${selectedRecipe?.shortTitle ?? selectedWorkflow.title} · ${classLabel} · ${artifact.shortLabel}`}</p>
+          {activeStep < 3 ? (
+            <button type="button" className="next-button" onClick={goNext}>{nextLabel} →</button>
+          ) : (
+            <a className="next-button" href={selectedProvider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, selectedProvider.name)}>{artifact.actionLabel} →</a>
+          )}
         </div>
       </section>
 
-      <section className="ecosystem" aria-labelledby="ecosystem-title">
-        <div className="ecosystem-heading">
-          <span className="step-chip step-chip-dark">04 · Your creator ecosystem</span>
-          <h2 id="ecosystem-title">The best of your previous studios—connected.</h2>
-          <p>
-            The new recipes borrow the strongest patterns from the maths library, prompt vault,
-            problem atlas and visual hero system. Open a specialist tool when you want to go even deeper.
-          </p>
-        </div>
-        <div className="ecosystem-grid">
-          {ECOSYSTEM_TOOLS.map((tool) => (
-            <a href={tool.url} target="_blank" rel="noopener noreferrer" key={tool.title}>
-              <span>{tool.glyph}</span>
-              <div><small>{tool.metric}</small><strong>{tool.title}</strong><p>{tool.description}</p></div>
-              <i aria-hidden="true">↗</i>
-            </a>
-          ))}
-        </div>
+      <section className="tool-shelf">
+        <details>
+          <summary><span><strong>Your connected teacher-tool shelf</strong><small>The strongest parts of your previous studios remain one tap away</small></span><i>＋</i></summary>
+          <div>{ECOSYSTEM_TOOLS.map((tool) => <a href={tool.url} target="_blank" rel="noopener noreferrer" key={tool.title}><i>{tool.glyph}</i><span><small>{tool.metric}</small><strong>{tool.title}</strong><p>{tool.description}</p></span><b>↗</b></a>)}</div>
+        </details>
       </section>
 
-      <section className="trust-architecture" aria-labelledby="trust-title">
-        <div>
-          <span>Deep intelligence. Visible confidence.</span>
-          <h2 id="trust-title">Beast-level does not mean reckless.</h2>
-          <p>
-            Every mission gets an instruction hierarchy, source boundary, feasibility check,
-            internal repair pass and teacher verification ledger before the AI returns its artifact.
-          </p>
-        </div>
-        <div className="trust-grid">
-          <article><span>01</span><strong>Diagnose</strong><p>Find missing facts and risky assumptions.</p></article>
-          <article><span>02</span><strong>Design</strong><p>Align goals, evidence and classroom reality.</p></article>
-          <article><span>03</span><strong>Stress-test</strong><p>Check truth, access, timing and totals.</p></article>
-          <article><span>04</span><strong>Repair</strong><p>Fix weak sections before returning.</p></article>
-        </div>
-      </section>
-
-      <footer className="command-footer">
-        <div className="command-brand footer-brand">
-          <span className="brand-orbit" aria-hidden="true"><i />TP</span>
-          <span><strong>Teacher Prompt Studio</strong><small>Built for real Indian classrooms</small></span>
-        </div>
+      <footer className="maker-footer">
+        <span><strong>Teacher Prompt Studio</strong><small>Real artifacts. Deep prompts. Comfortable flow.</small></span>
         <p>No login · No tracking · No learner data uploaded</p>
-        <a href="#top">Back to command centre ↑</a>
+        <a href="#top">Back to top ↑</a>
       </footer>
     </main>
   );

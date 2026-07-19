@@ -19,6 +19,9 @@ export type ArtifactFile = {
   format: string;
   audience: string;
   required: boolean;
+  filename?: string;
+  contains?: string[];
+  mustExclude?: string[];
 };
 
 export type ArtifactProfile = {
@@ -54,22 +57,50 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
     canvas: "A4 · print-safe · low-ink option",
     formats: ["PDF", "DOCX", "ZIP"],
     files: [
-      { label: "Learner copy", format: "PDF", audience: "Students", required: true },
-      { label: "Editable master", format: "DOCX", audience: "Teacher", required: true },
-      { label: "Answer key", format: "PDF", audience: "Teacher", required: true },
+      {
+        label: "Student paper",
+        format: "PDF",
+        audience: "Students",
+        required: true,
+        filename: "student-paper.pdf",
+        contains: ["title block and candidate fields", "learner instructions", "complete questions and stimuli", "marks and realistic response space"],
+        mustExclude: ["answers or hints", "assessment blueprint", "assumptions or success-evidence notes", "marking guidance", "quality-audit commentary"],
+      },
+      {
+        label: "Editable student master",
+        format: "DOCX",
+        audience: "Teacher editing",
+        required: true,
+        filename: "student-paper-editable.docx",
+        contains: ["the exact editable learner paper", "native styles and tables", "complex-script font settings", "accessible document metadata"],
+        mustExclude: ["answers or hints", "teacher-only blueprint", "AI or production notes", "tracked changes and comments"],
+      },
+      {
+        label: "Teacher assessment pack",
+        format: "PDF",
+        audience: "Teacher only",
+        required: true,
+        filename: "teacher-assessment-pack.pdf",
+        contains: ["assessment blueprint or practice map", "complete answer key", "marking scheme and accepted variants", "misconception notes", "preflight evidence"],
+        mustExclude: ["unfinished items", "dummy options", "unsupported official-alignment claims"],
+      },
     ],
     deliveryRules: [
-      "Create an A4 learner PDF, an editable DOCX master and a separate teacher answer-key PDF.",
-      "Use controlled page breaks, generous answer space, consistent numbering and photocopy-safe contrast.",
-      "Package multiple files with clear, versioned filenames and a one-page manifest when ZIP creation is available.",
+      "Create three separate physical files: a clean student PDF, an exact editable student DOCX and a teacher-only assessment pack PDF. Never combine teacher and student versions in one file.",
+      "Use an original research-university academic editorial system with a modular grid, restrained accent, professional typesetting, candidate fields, consistent marks, running page numbers and photocopy-safe contrast.",
+      "Use controlled page breaks, keep complete MCQs together, reserve response space in proportion to marks and never expose operational assumptions in the student paper.",
+      "For every requested language, use the named script-specific Noto font family, set language metadata, embed or subset fonts in PDF, render every page and verify searchable text after export.",
+      "Package files with clear topic, audience, language and version identifiers when ZIP creation is available.",
     ],
     qualityGates: [
       "Recalculate every count, mark, answer, unit and cross-reference across all files.",
-      "Check that no teacher answer, hint or scoring note leaks into the learner copy.",
-      "Reject clipped tables, orphaned questions, tiny type and answer spaces that do not match the task.",
+      "Reject the release if any placeholder, ellipsis-as-content, empty option, incomplete stem, missing stimulus or dummy answer remains.",
+      "Check that no teacher answer, hint, blueprint, assumption, scoring note or AI commentary leaks into either student file.",
+      "Reject clipped tables, orphaned questions, split options, tiny type, broken glyphs and answer spaces that do not match the marks.",
+      "Reopen and render the exported files; a check that was not run counts as a failure, not a pass.",
     ],
     recommendedProviders: ["chatgpt", "claude", "gemini"],
-    fallback: "Create one downloadable self-contained HTML file with print styles for separate learner and teacher PDFs.",
+    fallback: "Create separate downloadable self-contained student-paper, editable-student-master and teacher-pack HTML files with A4 print styles; preserve the same physical audience firewall.",
     interactive: false,
   },
   {
@@ -426,6 +457,16 @@ export const WORKFLOW_ARTIFACT_DEFAULTS: Record<string, ArtifactId> = {
 
 export const VISUAL_STYLES = [
   {
+    id: "academic-editorial",
+    label: "Scholarly university",
+    description: "University-press restraint: serif-led hierarchy, generous whitespace, disciplined tables and one muted academic accent.",
+  },
+  {
+    id: "technical-institute",
+    label: "Technical institute",
+    description: "Research-institute clarity: modular grid, precise sans typography, data-led structure and rigorous visual economy.",
+  },
+  {
     id: "exam-clean",
     label: "Exam clean",
     description: "Crisp hierarchy, low ink and zero decoration that competes with the work.",
@@ -456,6 +497,44 @@ export const VISUAL_STYLES = [
     description: "Contemporary Indian editorial colour and pattern used with restraint and no stereotypes.",
   },
 ] as const;
+
+export const ASSESSMENT_PROFILES = [
+  {
+    id: "balanced-academic",
+    label: "Balanced academic",
+    description: "A deliberate ladder from secure knowledge to explanation, application and transfer.",
+    rows: [
+      { label: "Single-select MCQ", weight: 0.4, marksEach: 1, purpose: "breadth, concepts and misconception discrimination" },
+      { label: "Short constructed response", weight: 0.3, marksEach: 2, purpose: "explanation, method and precise subject language" },
+      { label: "Data or representation application", weight: 0.2, marksEach: 3, purpose: "interpretation, modelling and multi-step application" },
+      { label: "Extended transfer or evaluation", weight: 0.1, marksEach: 4, purpose: "unfamiliar transfer, justification and evaluation" },
+    ],
+  },
+  {
+    id: "application-rich",
+    label: "Application rich",
+    description: "Fewer routine checks and more data, representation, decision and unfamiliar transfer.",
+    rows: [
+      { label: "Single-select MCQ", weight: 0.25, marksEach: 1, purpose: "essential concepts and diagnostic distractors" },
+      { label: "Short constructed response", weight: 0.25, marksEach: 2, purpose: "explanation and representation" },
+      { label: "Data or representation application", weight: 0.35, marksEach: 3, purpose: "discipline-native analysis and multi-step reasoning" },
+      { label: "Extended transfer or evaluation", weight: 0.15, marksEach: 4, purpose: "novel situations, justification and evaluation" },
+    ],
+  },
+  {
+    id: "rapid-diagnostic",
+    label: "Rapid diagnostic",
+    description: "Fast evidence with strong distractors, short explanations and a compact application check.",
+    rows: [
+      { label: "Single-select MCQ", weight: 0.6, marksEach: 1, purpose: "quick prerequisite and misconception evidence" },
+      { label: "Short constructed response", weight: 0.3, marksEach: 2, purpose: "reasoning that cannot be guessed" },
+      { label: "Data or representation application", weight: 0.1, marksEach: 3, purpose: "one authentic application check" },
+      { label: "Extended transfer or evaluation", weight: 0, marksEach: 4, purpose: "omitted unless allocation produces at least one item" },
+    ],
+  },
+] as const;
+
+export type AssessmentProfileId = (typeof ASSESSMENT_PROFILES)[number]["id"];
 
 export const FINISH_LEVELS = [
   {
@@ -488,7 +567,7 @@ export const FOLLOW_UP_PATHS: Array<{
   accent: string;
 }> = [
   { id: "repair", label: "Fix the file", question: "AI gave text or a broken file?", description: "Force real file delivery and repair missing, clipped or incorrect parts.", accent: "coral" },
-  { id: "visual", label: "Make it unforgettable", question: "Looks ordinary?", description: "Art-direct the same artifact without weakening clarity or learning.", accent: "violet" },
+  { id: "visual", label: "Academic polish", question: "Looks like a text dump?", description: "Rebuild it with disciplined university-press hierarchy, typography and whitespace.", accent: "violet" },
   { id: "adapt", label: "Fit my learners", question: "Needs easier access?", description: "Make it bilingual, accessible, simpler or more challenging.", accent: "cyan" },
   { id: "deepen", label: "Deepen the thinking", question: "Too generic or shallow?", description: "Add subject-native reasoning, misconception contrast and transfer.", accent: "lime" },
   { id: "transform", label: "Change the format", question: "Need another medium?", description: "Recompose it as slides, visual, PDF, site, simulation or workbook.", accent: "amber" },

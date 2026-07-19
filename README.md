@@ -13,7 +13,9 @@ simulations, workbooks, media storyboards, brainstorm canvases and complete
 resource packs. The compiler rejects ordinary chat prose, defines exact file and
 production requirements, runs topic-specific originality tests, embeds a
 metadata-only creator marker and supplies an easy same-chat improvement path.
-The full library still includes 79 specialist workflows.
+A hard academic-production preflight rejects placeholders, audience leakage,
+broken multilingual glyphs, incomplete questions and unverified exports. The
+full library still includes 79 specialist workflows.
 
 ## Product principles
 
@@ -23,6 +25,9 @@ The full library still includes 79 specialist workflows.
 - Student information must be anonymized before it is added to a prompt.
 - Accessibility, source fidelity, safety, and teacher review are built into the
   relevant workflows.
+- Assessments use exact one-tap item/mark architectures, separate student and
+  teacher files, script-specific embedded fonts and research-university
+  editorial rules without copying institutional branding.
 - Selected power-ups update both the instructions and the output contract.
 - Source-sensitive workflows require or recommend the material they need.
 - Readiness is explained across goal, learners, evidence, constraints,

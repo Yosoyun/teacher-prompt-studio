@@ -11,9 +11,11 @@ import {
   type ReactNode,
 } from "react";
 import ArtifactStage from "./ArtifactStage";
+import { buildAssessmentSpec } from "./assessment-spec";
 import {
   ARTIFACT_FAMILIES,
   ARTIFACT_PROFILES,
+  ASSESSMENT_PROFILES,
   CREATOR_MARKER,
   CREATOR_SIGNATURE,
   FINISH_LEVELS,
@@ -23,6 +25,7 @@ import {
   getArtifactProfile,
   type ArtifactFamily,
   type ArtifactId,
+  type AssessmentProfileId,
 } from "./artifact-data";
 import {
   ADD_ONS,
@@ -33,7 +36,10 @@ import {
   type PromptWorkflow,
   type WorkflowCategory,
 } from "./prompt-data";
-import { buildTeacherPrompt, type BuilderInput } from "./prompt-engine";
+import {
+  buildTeacherPrompt,
+  type BuilderInput,
+} from "./prompt-engine";
 import {
   AI_PROVIDERS,
   BOARD_OPTIONS,
@@ -64,6 +70,13 @@ const DEFAULT_ARTIFACT = defaultArtifactId(
   DEFAULT_WORKFLOW.category,
 );
 
+const STRUCTURED_ITEM_WORKFLOW_IDS = new Set([
+  "quiz-test",
+  "competitive-exam",
+  "worksheet-homework",
+  "question-bank",
+]);
+
 const initialForm = {
   subject: "Mathematics",
   customSubject: "",
@@ -92,7 +105,7 @@ const initialForm = {
   mustAvoid: "Do not invent current board patterns, syllabus codes, marks or official claims.",
   powerMode: DEFAULT_RECIPE.powerMode ?? "Expert",
   collaborationStyle: "Proceed intelligently with stated assumptions",
-  outputForm: "Teacher version and learner-facing version",
+  outputForm: "Separate teacher and learner files",
 };
 
 type FormState = typeof initialForm;
@@ -139,8 +152,9 @@ export default function PromptStudio() {
   );
   const [artifactId, setArtifactId] = useState<ArtifactId>(DEFAULT_ARTIFACT);
   const [artifactFamily, setArtifactFamily] = useState<ArtifactFamily>("Print");
-  const [visualStyleId, setVisualStyleId] = useState("editorial-notebook");
+  const [visualStyleId, setVisualStyleId] = useState("academic-editorial");
   const [finishId, setFinishId] = useState("polished");
+  const [assessmentProfileId, setAssessmentProfileId] = useState<AssessmentProfileId>("balanced-academic");
   const [interactionMode, setInteractionMode] = useState("Guided exploration with meaningful feedback, clear progress and a reset path");
   const [selectedProviderId, setSelectedProviderId] = useState("chatgpt");
   const [boardId, setBoardId] = useState("cbse");
@@ -169,8 +183,16 @@ export default function PromptStudio() {
   const selectedBoard = BOARD_OPTIONS.find((board) => board.id === boardId) ?? BOARD_OPTIONS[0];
   const artifact = getArtifactProfile(artifactId);
   const selectedProvider = AI_PROVIDERS.find((provider) => provider.id === selectedProviderId) ?? AI_PROVIDERS[0];
-  const visualStyle = VISUAL_STYLES.find((style) => style.id === visualStyleId) ?? VISUAL_STYLES[1];
+  const visualStyle = VISUAL_STYLES.find((style) => style.id === visualStyleId) ?? VISUAL_STYLES[0];
   const finish = FINISH_LEVELS.find((item) => item.id === finishId) ?? FINISH_LEVELS[1];
+  const selectedAssessmentProfile = ASSESSMENT_PROFILES.find((profile) => profile.id === assessmentProfileId) ?? ASSESSMENT_PROFILES[0];
+  const usesAssessmentArchitecture = STRUCTURED_ITEM_WORKFLOW_IDS.has(selectedWorkflow.id);
+  const assessmentSpec = useMemo(
+    () => usesAssessmentArchitecture
+      ? buildAssessmentSpec(selectedAssessmentProfile, questionCount)
+      : undefined,
+    [questionCount, selectedAssessmentProfile, usesAssessmentArchitecture],
+  );
   const topicSuggestions = TOPIC_BANK[form.subject] ?? [
     "Introduce a new concept",
     "Revision of a difficult chapter",
@@ -241,6 +263,7 @@ export default function PromptStudio() {
       workflow: selectedWorkflow,
       recipeId: selectedRecipeId,
       artifact,
+      assessmentSpec,
       requiredOutputs: selectedRecipe?.outputs ?? selectedWorkflow.outputSections,
       visualStyle: `${visualStyle.label}: ${visualStyle.description}`,
       interactionMode,
@@ -251,7 +274,7 @@ export default function PromptStudio() {
         audienceMode === "school"
           ? `Class ${grade}, ${classSize} learners. ${form.learnerContext}`
           : `${form.level}, ${classSize} learners. ${form.learnerContext}`,
-      details: `${form.details}\n\nTeacher-set controls: approximately ${questionCount} countable questions or checks where relevant; ${DIFFICULTY_OPTIONS[difficultyIndex].label.toLowerCase()} cognitive demand; ${finish.label.toLowerCase()} production finish. Apply only controls that make sense for the selected artifact.`,
+      details: `${form.details}\n\nTeacher-set controls: ${assessmentSpec ? `${assessmentSpec.profileLabel}; EXACTLY ${assessmentSpec.totalItems} items and ${assessmentSpec.totalMarks} marks using the structured assessment specification` : "no fixed assessment distribution"}; ${DIFFICULTY_OPTIONS[difficultyIndex].label.toLowerCase()} cognitive demand; ${finish.label.toLowerCase()} production finish. Apply only controls that make sense for the selected artifact.`,
       addOns,
     }),
     [
@@ -259,13 +282,13 @@ export default function PromptStudio() {
       selectedRecipeId,
       selectedRecipe,
       artifact,
+      assessmentSpec,
       visualStyle,
       interactionMode,
       form,
       audienceMode,
       grade,
       classSize,
-      questionCount,
       difficultyIndex,
       finish,
       addOns,
@@ -356,7 +379,7 @@ export default function PromptStudio() {
       details: recipe.details,
       powerMode: recipe.powerMode ?? "Expert",
       outputForm: recipe.category === "Assess" || recipe.id.includes("paper")
-        ? "Teacher version and learner-facing version"
+        ? "Separate teacher and learner files"
         : "Ready-to-use final artifact",
     }));
     setAddOns(unique([...workflow.defaultAddOns, ...recipe.addOns]));
@@ -379,7 +402,7 @@ export default function PromptStudio() {
       objective: workflow.defaultGoal,
       details: "",
       outputForm: workflow.flags?.includes("assessment")
-        ? "Teacher version and learner-facing version"
+        ? "Separate teacher and learner files"
         : "Ready-to-use final artifact",
     }));
     setAddOns(workflow.defaultAddOns);
@@ -612,8 +635,9 @@ export default function PromptStudio() {
     setAddOns(unique([...DEFAULT_WORKFLOW.defaultAddOns, ...DEFAULT_RECIPE.addOns]));
     setArtifactId(DEFAULT_ARTIFACT);
     setArtifactFamily("Print");
-    setVisualStyleId("editorial-notebook");
+    setVisualStyleId("academic-editorial");
     setFinishId("polished");
+    setAssessmentProfileId("balanced-academic");
     setBoardId("cbse");
     setGrade(10);
     setAudienceMode("school");
@@ -907,7 +931,7 @@ export default function PromptStudio() {
                 </div>
 
                 <div className="choice-section">
-                  <div className="choice-heading"><span>Visual direction</span><small>Topic-derived, never decorative filler</small></div>
+                  <div className="choice-heading"><span>Visual direction</span><small>Scholarly university is the default—original, never copied branding</small></div>
                   <div className="style-grid" role="radiogroup" aria-label="Visual direction">
                     {VISUAL_STYLES.map((style) => (
                       <button type="button" role="radio" aria-checked={visualStyleId === style.id} className={`${visualStyleId === style.id ? "selected" : ""} style-${style.id}`} onClick={() => setVisualStyleId(style.id)} key={style.id}>
@@ -918,6 +942,27 @@ export default function PromptStudio() {
                 </div>
 
                 <div className="smart-controls">
+                  {usesAssessmentArchitecture && (
+                    <div className="smart-control assessment-profile-control">
+                      <span><strong>Paper architecture</strong><i>{assessmentSpec?.totalMarks} marks</i></span>
+                      <div className="assessment-profile-buttons" role="radiogroup" aria-label="Assessment architecture">
+                        {ASSESSMENT_PROFILES.map((profile) => (
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={assessmentProfileId === profile.id}
+                            className={assessmentProfileId === profile.id ? "selected" : ""}
+                            onClick={() => setAssessmentProfileId(profile.id)}
+                            key={profile.id}
+                          >
+                            <strong>{profile.label}</strong>
+                            <small>{profile.description}</small>
+                          </button>
+                        ))}
+                      </div>
+                      <p>Exact item and mark totals are calculated automatically—nothing is left for the AI to invent.</p>
+                    </div>
+                  )}
                   <div className="smart-control">
                     <span><strong>{selectedWorkflow.flags?.includes("assessment") ? "Paper duration" : "Classroom time"}</strong><i>{TIME_OPTIONS[timeIndex]} min</i></span>
                     <input type="range" min="0" max={TIME_OPTIONS.length - 1} step="1" value={timeIndex} aria-label={selectedWorkflow.flags?.includes("assessment") ? "Paper duration" : "Classroom time"} onChange={(event) => { const index = Number(event.target.value); setTimeIndex(index); setForm((current) => ({ ...current, duration: `${TIME_OPTIONS[index]} minutes` })); }} />
@@ -928,7 +973,7 @@ export default function PromptStudio() {
                     <input type="range" min="0" max={DIFFICULTY_OPTIONS.length - 1} step="1" value={difficultyIndex} aria-label="Thinking demand" onChange={(event) => { const index = Number(event.target.value); setDifficultyIndex(index); setForm((current) => ({ ...current, cognitiveDemand: DIFFICULTY_OPTIONS[index].value })); }} />
                     <p>{DIFFICULTY_OPTIONS[difficultyIndex].note}</p>
                   </div>
-                  {(selectedWorkflow.flags?.includes("assessment") || artifactId === "worksheet-bundle") && (
+                  {usesAssessmentArchitecture && (
                     <div className="smart-control">
                       <span><strong>Question volume</strong><i>{questionCount} items</i></span>
                       <input type="range" min="5" max="50" step="5" value={questionCount} aria-label="Question volume" onChange={(event) => setQuestionCount(Number(event.target.value))} />
@@ -988,10 +1033,10 @@ export default function PromptStudio() {
                     {result.artifactManifest.map((file) => <span key={`${file.label}-${file.format}`}><i>{file.format}</i><strong>{file.label}</strong></span>)}
                   </div>
                   <ul>
-                    <li>Rejects a normal text answer</li>
-                    <li>Runs a topic-substitution test</li>
-                    <li>Checks files before returning</li>
-                    <li>Embeds your creator mark in metadata</li>
+                    <li>Rejects placeholders and incomplete options</li>
+                    <li>{usesAssessmentArchitecture ? "Separates student and teacher files physically" : "Verifies every required file and audience boundary"}</li>
+                    <li>Embeds and render-checks language fonts</li>
+                    <li>Requires numeric PASS evidence before release</li>
                   </ul>
                 </div>
 
@@ -1067,6 +1112,8 @@ export default function PromptStudio() {
               subject={form.subject}
               classLabel={classLabel}
               board={selectedBoard.label}
+              files={result.artifactManifest}
+              assessmentMode={Boolean(selectedWorkflow.flags?.includes("assessment"))}
             />
             <div className="confidence-card">
               <div><span>Artifact confidence</span><strong>{result.score}%</strong></div>

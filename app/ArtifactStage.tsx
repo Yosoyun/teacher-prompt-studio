@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import type { ArtifactProfile } from "./artifact-data";
+import type { ArtifactFile, ArtifactProfile } from "./artifact-data";
 
 type ArtifactStageProps = {
   artifact: ArtifactProfile;
@@ -10,6 +10,8 @@ type ArtifactStageProps = {
   subject: string;
   classLabel: string;
   board: string;
+  files: ArtifactFile[];
+  assessmentMode: boolean;
 };
 
 const shortBoard = (value: string) => value.replace(" / NCERT", "").replace("CISCE — ", "");
@@ -21,6 +23,8 @@ export default function ArtifactStage({
   subject,
   classLabel,
   board,
+  files,
+  assessmentMode,
 }: ArtifactStageProps) {
   const [scene, setScene] = useState(0);
   const [modelValue, setModelValue] = useState(58);
@@ -30,26 +34,35 @@ export default function ArtifactStage({
     setScene((current) => (current + direction + 4) % 4);
   };
 
-  const renderDocument = () => (
-    <div className="stage-document" aria-label="Document blueprint preview">
-      <button type="button" className="paper paper-back" onClick={() => cycleScene(-1)} aria-label="Previous preview page">
-        <span>Answer support</span>
-      </button>
-      <button type="button" className="paper paper-front" onClick={() => cycleScene(1)} aria-label="Next preview page">
-        <small>{shortBoard(board)} · {classLabel}</small>
-        <strong>{topic || mission}</strong>
-        <i className="paper-rule wide" />
-        <i className="paper-rule" />
-        <div className="paper-callout">
-          <span>{scene + 1}</span>
-          <p>{["Concept anchor", "Worked contrast", "Learner challenge", "Teacher check"][scene]}</p>
-        </div>
-        <i className="paper-rule wide" />
-        <i className="paper-rule short" />
-        <em>Tap page to preview the next layer</em>
-      </button>
-    </div>
-  );
+  const renderDocument = () => {
+    const assessment = assessmentMode;
+    const layers = assessment
+      ? ["Academic cover + instructions", "Complete questions + marks", "Response space + page logic", "Teacher key kept separate"]
+      : ["Concept architecture", "Worked contrast", "Learner application", "Teacher-use layer"];
+
+    return (
+      <div className="stage-document" aria-label="Document blueprint preview">
+        <button type="button" className="paper paper-back" onClick={() => cycleScene(-1)} aria-label="Previous preview page">
+          <span>{assessment ? "Teacher assessment pack" : "Editable source"}</span>
+        </button>
+        <button type="button" className="paper paper-front" onClick={() => cycleScene(1)} aria-label="Next preview page">
+          <small>{assessment ? "Student paper · " : ""}{shortBoard(board)} · {classLabel}</small>
+          <strong>{topic || mission}</strong>
+          <div className="paper-meta"><span>{subject}</span><b>{assessment ? "Time · Marks · Version" : "Academic edition"}</b></div>
+          <i className="paper-rule wide" />
+          <i className="paper-rule" />
+          <div className="paper-callout">
+            <span>{scene + 1}</span>
+            <p>{layers[scene]}</p>
+          </div>
+          <i className="paper-rule wide" />
+          <i className="paper-rule short" />
+          <div className="paper-preflight"><span>Glyphs ✓</span><span>Placeholders 0</span><span>Audience-safe</span></div>
+          <em>Tap page to inspect the next production layer</em>
+        </button>
+      </div>
+    );
+  };
 
   const renderSlides = () => (
     <div className="stage-slides" aria-label="Slide deck blueprint preview">
@@ -156,7 +169,7 @@ export default function ArtifactStage({
   const renderBundle = () => (
     <div className="stage-bundle" aria-label="Multi-file bundle blueprint preview">
       <div className="bundle-core"><span>{artifact.glyph}</span><strong>{topic || mission}</strong><small>{classLabel} · {shortBoard(board)}</small></div>
-      {artifact.files.slice(0, 4).map((file, index) => (
+      {files.slice(0, 4).map((file, index) => (
         <button type="button" className={`bundle-file file-${index}`} onClick={() => setScene(index)} key={file.label}>
           <span>{file.format}</span><strong>{file.label}</strong><i>{scene === index ? "Previewing" : "Ready in pack"}</i>
         </button>
@@ -205,7 +218,7 @@ export default function ArtifactStage({
       </div>
       <div className="stage-preview">{preview}</div>
       <div className="stage-manifest">
-        {artifact.files.map((file) => (
+        {files.map((file) => (
           <span key={`${file.label}-${file.format}`}><i>{file.format}</i><strong>{file.label}</strong>{file.required && <small>Required</small>}</span>
         ))}
       </div>

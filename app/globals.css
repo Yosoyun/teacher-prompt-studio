@@ -1277,6 +1277,8 @@ details[open] > summary > i {
 .style-grid button > i b:nth-child(2) { top: 25px; left: 10px; width: 25px; height: 5px; opacity: 0.6; }
 .style-grid button > i b:nth-child(3) { right: 9px; bottom: 8px; width: 17px; height: 17px; }
 
+.style-academic-editorial { --style-a: #fbf8f0; --style-b: #d8d0c2; --style-c: #702f42; }
+.style-technical-institute { --style-a: #f5f6f3; --style-b: #899593; --style-c: #b43b35; }
 .style-exam-clean { --style-a: #fff; --style-b: #e4e7e3; --style-c: #263a34; }
 .style-editorial-notebook { --style-a: #fff4d7; --style-b: #d9cab0; --style-c: #c7503d; }
 .style-cinematic-concept { --style-a: #101d34; --style-b: #603fa1; --style-c: #c9f360; }
@@ -1345,6 +1347,52 @@ details[open] > summary > i {
 
 .interaction-control {
   grid-column: 1 / -1;
+}
+
+.assessment-profile-control {
+  grid-column: 1 / -1;
+  border-color: rgba(112, 47, 66, 0.24);
+  background: linear-gradient(135deg, #fbf8f0, #f3eee5);
+}
+
+.assessment-profile-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assessment-profile-buttons button {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 92px;
+  border: 1px solid #d9d1c3;
+  border-radius: 11px;
+  background: rgba(255,255,255,0.82);
+  padding: 12px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.assessment-profile-buttons button strong {
+  font-size: 12px;
+}
+
+.assessment-profile-buttons button small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.assessment-profile-buttons button.selected {
+  border-color: #702f42;
+  background: #702f42;
+  color: white;
+  box-shadow: 0 8px 22px rgba(112, 47, 66, 0.16);
+}
+
+.assessment-profile-buttons button.selected small {
+  color: rgba(255,255,255,0.76);
 }
 
 .interaction-control > div {
@@ -1624,7 +1672,8 @@ details[open] > summary > i {
   top: 36px;
   left: calc(50% - 90px);
   transform: rotate(7deg);
-  border: 8px solid #d7e2db;
+  border: 8px solid #d9d1c3;
+  border-top-color: #702f42;
   padding: 16px;
   color: #65736c;
   font-size: 11px;
@@ -1653,10 +1702,29 @@ details[open] > summary > i {
 
 .paper-front > strong {
   display: block;
-  margin: 9px 0 16px;
+  margin: 9px 0 8px;
   font-size: 18px;
   line-height: 1.1;
   letter-spacing: -0.03em;
+}
+
+.paper-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 11px;
+  border-top: 1px solid #d8d0c2;
+  border-bottom: 1px solid #d8d0c2;
+  padding: 5px 0;
+  color: #685f59;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.paper-meta b {
+  color: #702f42;
+  font-weight: 900;
 }
 
 .paper-rule {
@@ -1678,7 +1746,7 @@ details[open] > summary > i {
   gap: 8px;
   margin: 18px 0;
   border-radius: 9px;
-  background: #e9f7c6;
+  background: #f2e8e6;
   padding: 9px;
 }
 
@@ -1688,10 +1756,31 @@ details[open] > summary > i {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #1c4f40;
+  background: #702f42;
   color: white;
   font-size: 11px;
   font-weight: 900;
+}
+
+.paper-preflight {
+  position: absolute;
+  right: 18px;
+  bottom: 34px;
+  left: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.paper-preflight span {
+  border: 1px solid #d8d0c2;
+  border-radius: 999px;
+  background: #fbf8f0;
+  padding: 3px 5px;
+  color: #625851;
+  font-size: 6px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .paper-callout p {
@@ -3390,6 +3479,10 @@ details[open] > summary > i {
   }
 
   .interaction-control > div {
+    grid-template-columns: 1fr;
+  }
+
+  .assessment-profile-buttons {
     grid-template-columns: 1fr;
   }
 

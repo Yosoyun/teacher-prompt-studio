@@ -4,11 +4,33 @@ import {
   type PromptWorkflow,
 } from "./prompt-data";
 import type { ArtifactFile, ArtifactProfile } from "./artifact-data";
+import {
+  ACADEMIC_EDITORIAL_RULES,
+  ASSESSMENT_EDITORIAL_RULES,
+  compileLanguageProductionRules,
+  compilePreflightGateLines,
+} from "./artifact-preflight";
+
+export type AssessmentSpec = {
+  profileId: string;
+  profileLabel: string;
+  totalItems: number;
+  totalMarks: number;
+  reasoningMarkShare: number;
+  rows: Array<{
+    label: string;
+    count: number;
+    marksEach: number;
+    totalMarks: number;
+    purpose: string;
+  }>;
+};
 
 export type BuilderInput = {
   workflow: PromptWorkflow;
   recipeId: string;
   artifact: ArtifactProfile;
+  assessmentSpec?: AssessmentSpec;
   requiredOutputs: string[];
   visualStyle: string;
   interactionMode: string;
@@ -384,6 +406,8 @@ function qualityRules(input: BuilderInput) {
     rules.push(
       "Assessment validity: verify answerability, keys, distractors, units, marks, item counts, stimulus-child relationships, duplication, ambiguity and construct alignment.",
       "Originality and integrity: create original items and never mislabel generated work as an official or previous-year item.",
+      "Backward design: map every item to a measurable outcome, construct, cognitive demand, expected evidence, mark value and realistic completion time.",
+      "Item completeness: build each question and its independently solved key together; every MCQ needs four complete plausible options and one defensible answer; every constructed response needs scoring evidence and partial-credit logic where relevant.",
     );
   }
 
@@ -424,6 +448,86 @@ function uniqueSections(input: BuilderInput) {
   });
 }
 
+function requiresPhysicalAudienceSeparation(input: BuilderInput) {
+  const requestedContent = uniqueSections(input).join(" | ");
+  const requestsLearnerContent = /student|learner|question|paper|worksheet|practice|diagnostic|exit ticket|performance task/i.test(requestedContent);
+  const requestsTeacherContent = /answer|solution|marking|rubric|teacher|blueprint|quality|interpretation|coding guide|review checklist/i.test(requestedContent);
+  return requestsLearnerContent && requestsTeacherContent;
+}
+
+function effectiveArtifactFiles(input: BuilderInput): ArtifactFile[] {
+  const files = input.artifact.files;
+  if (!requiresPhysicalAudienceSeparation(input)) return files;
+
+  const hasLearnerFile = files.some((file) => /student|learner/i.test(file.audience));
+  const hasTeacherFile = files.some((file) => /teacher/i.test(file.audience));
+
+  if (hasLearnerFile && hasTeacherFile) {
+    return files.map((file) => /teacher/i.test(file.audience) && !file.required
+      ? { ...file, required: true }
+      : file);
+  }
+
+  const primary = files.find((file) => file.required) ?? files[0];
+  const primaryFormat = primary?.format ?? "PDF";
+  const teacherFormat = primaryFormat === "PNG" ? "PDF" : primaryFormat;
+  const derived: ArtifactFile[] = [];
+
+  if (hasLearnerFile) {
+    derived.push(...files);
+  } else {
+    derived.push({
+      label: "Student artifact",
+      format: primaryFormat,
+      audience: "Students",
+      required: true,
+      filename: `student-artifact.${primaryFormat.toLowerCase()}`,
+      contains: ["learner title and instructions", "complete learner-facing content", "marks or response affordances where relevant"],
+      mustExclude: ["answers and hints", "blueprint or assumptions", "marking and QA notes", "prompt commentary"],
+    });
+  }
+
+  if (hasTeacherFile) {
+    derived.push(...files
+      .filter((file) => /teacher/i.test(file.audience))
+      .map((file) => ({ ...file, required: true })));
+  } else {
+    derived.push({
+      label: "Teacher guidance pack",
+      format: teacherFormat,
+      audience: "Teacher only",
+      required: true,
+      filename: `teacher-guidance.${teacherFormat.toLowerCase()}`,
+      contains: ["blueprint or design rationale", "complete answers or guidance", "marking or facilitation notes", "preflight evidence"],
+      mustExclude: ["unfinished content", "dummy options", "unsupported official-alignment claims"],
+    });
+  }
+
+  return derived;
+}
+
+function fallbackHtmlFilename(file: ArtifactFile, index: number) {
+  const sourceName = file.filename || file.label;
+  const stem = sourceName
+    .replace(/\.[a-z0-9]+$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `${stem || `artifact-${index + 1}`}.html`;
+}
+
+function effectivePortableFallback(input: BuilderInput, files: ArtifactFile[]) {
+  if (!requiresPhysicalAudienceSeparation(input)) return input.artifact.fallback;
+
+  const fallbackFiles = files
+    .filter((file) => file.required)
+    .map((file, index) => `${fallbackHtmlFilename(file, index)} (${file.audience})`)
+    .join(", ");
+
+  return `Create and attach these separate downloadable, self-contained HTML files: ${fallbackFiles}. Give every file embedded styles, print-ready A4 behavior where relevant and its own accessible title. Preserve each manifest entry's audience, MUST CONTAIN and MUST EXCLUDE contract. Never merge learner and teacher content into one fallback file.`;
+}
+
 function collaborationRule(input: BuilderInput) {
   if (input.collaborationStyle.startsWith("Ask")) {
     return "If a missing answer could materially change accuracy, safety or validity, return only a QUESTIONS section with no more than three high-value questions and stop. Otherwise proceed and state only material assumptions.";
@@ -436,9 +540,21 @@ function collaborationRule(input: BuilderInput) {
   return "Proceed without routine clarification. Make conservative, reversible assumptions, label only the material ones, and ask a question only when proceeding would risk accuracy, safety or validity.";
 }
 
+function allowsControlledPlaceholders(input: BuilderInput) {
+  return /^Editable\b/i.test(clean(input.outputForm)) || Boolean(input.workflow.flags?.includes("communication"));
+}
+
 function outputFormRule(input: BuilderInput) {
-  if (input.outputForm.startsWith("Editable")) {
-    return "Return an editable reusable template. Replace context-specific values with clear {{PLACEHOLDER_NAMES}}, then include a compact field guide and one filled micro-example.";
+  const templateRule = allowsControlledPlaceholders(input)
+    ? "For information that must be supplied later, use uniquely named {{PLACEHOLDER_FIELDS}} and list every intentional field in a teacher-only placeholder ledger with its purpose and an example value. Unlisted, dummy and learner-facing placeholders are forbidden."
+    : "";
+
+  if (requiresPhysicalAudienceSeparation(input)) {
+    return `Teacher and learner materials must be separate physical files, not sections in one file. Learner files may contain only title block, instructions, stimuli, complete questions, response space and learner-safe references. Teacher files hold blueprint, assumptions, key, rubric, solutions, validation and local-verification notes. Reject any title such as ‘Teacher Version + Student Version’ and any teacher-only leakage into a learner file.${templateRule ? ` ${templateRule}` : ""}`;
+  }
+
+  if (templateRule) {
+    return `Return a polished artifact with controlled fields, not unfinished content. ${templateRule} Include one compact filled micro-example.`;
   }
 
   if (input.outputForm.startsWith("Teacher version")) {
@@ -459,8 +575,8 @@ function buildRefinements(input: BuilderInput): RefinementPrompt[] {
     {
       id: "audit-repair",
       label: "Fix the file",
-      description: "Repair text-only, missing, clipped or incorrect output.",
-      prompt: `The required ${artifact} was not delivered correctly. Audit the existing response and files for missing deliverables, incorrect format, clipping, broken layout, incomplete sections, factual errors and unusable interactions. Rebuild every material failure and attach the corrected files now. ${preserve}`,
+      description: "Run the hard preflight and rebuild every failed file.",
+      prompt: `The required ${artifact} failed production quality. Rerun the original STRICT ARTIFACT RELEASE GATE using only PASS, FAIL or NOT_RUN; NOT_RUN is a failure. Reopen and render the exported files, scan for placeholders and broken glyphs, verify physical audience separation, reconcile counts and answers, and rebuild every failure. Attach only the corrected versioned files plus numeric QA evidence. ${preserve}`,
     },
     {
       id: "deepen",
@@ -470,9 +586,9 @@ function buildRefinements(input: BuilderInput): RefinementPrompt[] {
     },
     {
       id: "visual",
-      label: "Make it unforgettable",
-      description: "Art-direct the same artifact with purposeful visuals.",
-      prompt: `Art-direct the existing ${artifact} so it feels distinctive, premium and memorable while becoming easier to use. Derive the visual metaphor, hierarchy and motion from ${topic}; do not add generic 3D effects, stock decoration or ornamental controls. Preserve accuracy and rebuild the file with a stronger visual system. ${preserve}`,
+      label: "Academic polish",
+      description: "Rebuild the same artifact with research-university editorial rigor.",
+      prompt: `Art-direct the existing ${artifact} with original research-university editorial rigor: a disciplined grid, purposeful hierarchy, excellent typesetting, restrained accent and generous whitespace. Derive any visual metaphor from ${topic}; do not copy institutional branding, add generic 3D effects, use stock decoration or create ornamental controls. Preserve accuracy, rerun the hard release gate and rebuild the file. ${preserve}`,
     },
     {
       id: "adapt-access",
@@ -495,10 +611,45 @@ function buildRefinements(input: BuilderInput): RefinementPrompt[] {
   ];
 }
 
-function artifactManifestLines(input: BuilderInput) {
-  return input.artifact.files.map((file, index) =>
-    `${index + 1}. ${file.label} — ${file.format} — ${file.audience}${file.required ? " — REQUIRED" : " — optional companion"}`,
-  );
+function artifactManifestLines(files: ArtifactFile[]) {
+  return files.flatMap((file, index) => {
+    const lines = [
+      `${index + 1}. ${file.filename ?? file.label} — ${file.label} — ${file.format} — ${file.audience}${file.required ? " — REQUIRED" : " — optional companion"}`,
+    ];
+    if (file.contains?.length) {
+      lines.push(`   MUST CONTAIN: ${file.contains.join("; ")}.`);
+    }
+    if (file.mustExclude?.length) {
+      lines.push(`   MUST EXCLUDE: ${file.mustExclude.join("; ")}.`);
+    }
+    return lines;
+  });
+}
+
+function fileFirewallLines() {
+  return [
+    "Create every required manifest entry as its own physical file. A heading or page break inside a combined file does not satisfy separate delivery.",
+    "Route each content section to the file whose audience and MUST CONTAIN rules permit it. Do not duplicate teacher-only content into learner files.",
+    "Before export, scan learner-facing files for answers, hints, rubrics, blueprints, assumptions, success-evidence notes, QA commentary and prompt language; the permitted count is zero.",
+    "Never title or deliver one document as ‘Teacher Version + Student Version’. Split, rename, reopen and verify the files instead.",
+  ];
+}
+
+function assessmentSpecificationLines(input: BuilderInput) {
+  const spec = input.assessmentSpec;
+  if (!spec) return [];
+
+  return [
+    `Architecture preset: ${spec.profileLabel} (${spec.profileId}).`,
+    `EXACT total: ${spec.totalItems} complete items and ${spec.totalMarks} marks. This is not approximate and may not be replaced with an invented paper pattern.`,
+    ...spec.rows.map((row) =>
+      `- ${row.count} × ${row.label} at ${row.marksEach} mark${row.marksEach === 1 ? "" : "s"} each = ${row.totalMarks} marks — ${row.purpose}.`,
+    ),
+    `Reasoning/application share: approximately ${spec.reasoningMarkShare}% of marks. Preserve or deepen this demand; do not convert it into disguised recall.`,
+    "Create the complete key and scoring logic in parallel with each item, then independently solve every item before layout.",
+    "The blueprint must reconcile item IDs, outcomes, constructs, cognitive demand, marks, expected evidence and estimated time exactly across paper and teacher pack.",
+    "If an authoritative exam pattern was not supplied, label this as an original classroom assessment and do not claim official, Cambridge, CBSE, ICSE, JEE, NEET or previous-year alignment.",
+  ];
 }
 
 function nonGenericGates(input: BuilderInput) {
@@ -574,7 +725,7 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
   const details = block(input.details) || "No additional preferences supplied.";
   const successEvidence =
     block(input.successEvidence) ||
-    "Derive observable success evidence from the stated purpose and label it as an assumption.";
+    "Derive observable success evidence from the stated purpose. Keep the derivation and any assumption in teacher-only planning content; never expose it in a learner file.";
   const resourceLimits =
     block(input.resourceLimits) ||
     "Use modest, commonly available resources and identify material assumptions.";
@@ -592,6 +743,17 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     .replace(/--+/g, "-")
     .replace(/[<>]/g, "");
   const referencesPresent = hasReferenceData(input);
+  const artifactFiles = effectiveArtifactFiles(input);
+  const portableFallback = effectivePortableFallback(input, artifactFiles);
+  const controlledPlaceholders = allowsControlledPlaceholders(input);
+  const isAssessment = Boolean(
+    input.assessmentSpec ||
+    input.workflow.flags?.includes("assessment"),
+  );
+  const usesAcademicEditorial = Boolean(
+    isAssessment ||
+    /scholarly university|technical institute|exam clean|editorial notebook/i.test(input.visualStyle),
+  );
   const referenceData = JSON.stringify(
     {
       taskMaterial: block(input.taskMaterial) || null,
@@ -652,16 +814,28 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "MANDATORY FILE DELIVERY",
     `Primary artifact: ${input.artifact.label}.`,
     `Production canvas: ${input.artifact.canvas}.`,
-    `Required attached files: ${input.artifact.files.filter((file) => file.required).map((file) => `${file.label} (${file.format})`).join(", ")}.`,
-    `Optional companions, when useful and supported: ${input.artifact.files.filter((file) => !file.required).map((file) => `${file.label} (${file.format})`).join(", ") || "none"}.`,
+    `Required attached files: ${artifactFiles.filter((file) => file.required).map((file) => `${file.label} (${file.format})`).join(", ")}.`,
+    `Optional companions, when useful and supported: ${artifactFiles.filter((file) => !file.required).map((file) => `${file.label} (${file.format})`).join(", ") || "none"}.`,
     "Create and attach the requested artifact files now using native file, code, canvas, presentation, spreadsheet or image tools available to you.",
-    "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, placeholders for future work or a promise to create the file later.",
+    controlledPlaceholders
+      ? "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, unlisted or dummy placeholders, or a promise to create the file later. Only controlled fields named in the teacher-only ledger are permitted."
+      : "Do not satisfy this mission with ordinary chat prose, a Markdown outline, a design description, raw source pasted into chat, placeholders for future work or a promise to create the file later.",
     "If a binary format cannot be attached, use the fallback below and still return a downloadable, render-ready artifact—not a prose answer.",
-    `Portable fallback: ${input.artifact.fallback}`,
+    `Portable fallback: ${portableFallback}`,
     "",
     "DELIVERABLE MANIFEST",
-    ...artifactManifestLines(input),
+    ...artifactManifestLines(artifactFiles),
     "",
+    "FILE FIREWALL — PHYSICAL AUDIENCE SEPARATION",
+    ...fileFirewallLines().map((rule) => `- ${rule}`),
+    "",
+    ...(input.assessmentSpec
+      ? [
+          "ASSESSMENT BLUEPRINT — EXACT, NOT APPROXIMATE",
+          ...assessmentSpecificationLines(input),
+          "",
+        ]
+      : []),
     "ARTIFACT CONTENT ARCHITECTURE",
     "The finished files must contain these aligned parts in an order appropriate to the medium:",
     ...outputSections.map((section, index) => `${index + 1}. ${section}`),
@@ -674,6 +848,21 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     `- Tone: ${clean(input.tone) || "clear, encouraging and professional"}.`,
     `- Depth target: ${clean(input.outputLength) || "practical classroom detail"}.`,
     "",
+    usesAcademicEditorial
+      ? "ACADEMIC PUBLICATION STANDARD — ORIGINAL, NO INSTITUTIONAL IMITATION"
+      : "PROFESSIONAL VISUAL PRODUCTION STANDARD — ORIGINAL, MEDIUM-APPROPRIATE",
+    ...(usesAcademicEditorial
+      ? ACADEMIC_EDITORIAL_RULES.map((rule) => `- ${rule}`)
+      : [
+          "- Build a coherent, original visual system with a purposeful grid, hierarchy, spacing rhythm, legible typography and medium-appropriate density.",
+          "- Let the selected visual direction shape the artifact without weakening accuracy, accessibility, file integrity or classroom usability.",
+          "- Do not copy institutional branding, logos, seals, signature layouts or protected identity systems, and do not imply affiliation or endorsement.",
+        ]),
+    ...(isAssessment ? ASSESSMENT_EDITORIAL_RULES.map((rule) => `- ${rule}`) : []),
+    "",
+    "LANGUAGE, FONT AND EXPORT PRODUCTION",
+    ...compileLanguageProductionRules(input.outputLanguage).map((rule) => `- ${rule}`),
+    "",
     "INDIAN CLASSROOM FIT",
     ...indianClassroomRules(input).map((rule) => `- ${rule}`),
     "",
@@ -682,6 +871,15 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "",
     "PROVENANCE METADATA — HIDDEN FROM LEARNER-FACING CONTENT",
     ...provenanceRules(input).map((rule) => `- ${rule}`),
+    "",
+    "STRICT ARTIFACT RELEASE GATE — PASS / FAIL / NOT_RUN",
+    "A check has only PASS, FAIL or NOT_RUN status. NOT_RUN is a failure. Do not attach or release any artifact until every applicable release blocker is PASS.",
+    "Build source → export requested file → reopen in an independent viewer or runtime → render every page, slide, screen and state → run gates on the exported result → repair → re-export and retest.",
+    "Never claim a check passed without observable evidence. If the binary format cannot be created and validated, create and validate the specified portable HTML fallback instead.",
+    ...compilePreflightGateLines(input.artifact, input.outputLanguage, isAssessment, artifactFiles, controlledPlaceholders).map((rule) => `- ${rule}`),
+    controlledPlaceholders
+      ? "Controlled-field mode: report ledgered fields separately from failures. Unlisted, dummy or learner-facing placeholders still fail release."
+      : "Ready-to-use mode: the placeholder count must be zero.",
   ];
 
   if (addOnRules.length) {
@@ -722,7 +920,10 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
     "",
     "FILE-ONLY FINAL RETURN",
     "Create and attach the named files now. Do not paste the artifact content into the conversation.",
-    "After the files, return only a delivery receipt of no more than five lines naming: files created, checks passed, the memorable practical feature, assumptions made, and items requiring teacher or local verification.",
+    "After the files, return only a compact teacher-only receipt naming: files created/opened; rendered surfaces checked; languages and embedded fonts; placeholder, broken-glyph and audience-leak counts; item/mark reconciliation; assumptions and local-verification items.",
+    controlledPlaceholders
+      ? "Use numeric evidence such as: PRE-FLIGHT 14/14 PASS · FILES 3/3 OPENED · RENDER 8/8 PAGES · LEDGERED FIELDS 6/6 · UNLISTED PLACEHOLDERS 0 · DUMMY PLACEHOLDERS 0 · BROKEN GLYPHS 0 · LEARNER/TEACHER LEAKS 0. Never turn NOT_RUN into PASS."
+      : "Use numeric evidence such as: PRE-FLIGHT 14/14 PASS · FILES 3/3 OPENED · RENDER 8/8 PAGES · PLACEHOLDERS 0 · BROKEN GLYPHS 0 · LEARNER/TEACHER LEAKS 0. Never turn NOT_RUN into PASS.",
     "Do not add generic encouragement, prompt commentary, a tutorial about file creation or claims that the result is perfect or error-proof.",
     `<!-- studio-provenance: ${safeCreatorMarker} | creator: ${safeCreatorSignature} -->`,
   );
@@ -730,7 +931,7 @@ export function buildTeacherPrompt(input: BuilderInput): PromptResult {
   return {
     prompt: lines.join("\n"),
     artifactLabel: input.artifact.label,
-    artifactManifest: input.artifact.files,
+    artifactManifest: artifactFiles,
     issues,
     score,
     status,

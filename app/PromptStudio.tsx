@@ -9,8 +9,15 @@ import {
 import {
   ADD_ONS,
   CATEGORY_META,
+  COGNITIVE_DEMANDS,
+  COLLABORATION_STYLES,
+  EDUCATOR_ROLES,
   LEVELS,
+  OUTPUT_FORMS,
+  PEDAGOGY_LENSES,
+  POWER_MODES,
   SUBJECTS,
+  TEACHING_SETTINGS,
   WORKFLOW_CATEGORIES,
   WORKFLOWS,
   type PromptWorkflow,
@@ -47,6 +54,18 @@ const initialForm = {
   details:
     "Use a short demonstration, pair discussion, guided practice and an exit check. Assume a board and everyday classroom materials only.",
   sourceMaterial: "",
+  taskMaterial: "",
+  educatorRole: "Classroom teacher",
+  teachingSetting: "Mainstream classroom",
+  countryRegion: "",
+  pedagogyLens: "Balanced and evidence-informed",
+  cognitiveDemand: "Strategic application and reasoning",
+  successEvidence: "",
+  resourceLimits: "",
+  mustAvoid: "",
+  powerMode: "Expert",
+  collaborationStyle: "Proceed intelligently with stated assumptions",
+  outputForm: "Ready-to-use final artifact",
 };
 
 type FormState = typeof initialForm;
@@ -66,6 +85,10 @@ export default function PromptStudio() {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<BuilderMode>("Quick");
   const [copyStatus, setCopyStatus] = useState("");
+  const [showAllAddOns, setShowAllAddOns] = useState(false);
+  const [workflowDrafts, setWorkflowDrafts] = useState<
+    Record<string, Partial<FormState>>
+  >({});
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const builderInput: BuilderInput = useMemo(
@@ -91,10 +114,50 @@ export default function PromptStudio() {
     const query = search.trim().toLowerCase();
     return WORKFLOWS.filter((item) => {
       const matchesCategory = category === "All" || item.category === category;
-      const searchable = `${item.title} ${item.summary} ${item.category}`.toLowerCase();
+      const searchable = [
+        item.title,
+        item.summary,
+        item.category,
+        ...(item.aliases ?? []),
+        ...item.taskRules,
+        ...(item.expertMethod ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
       return matchesCategory && (!query || searchable.includes(query));
     });
   }, [category, search]);
+
+  const visibleAddOns = useMemo(() => {
+    const priorityIds = new Set([
+      ...selectedWorkflow.defaultAddOns,
+      ...addOns,
+      ...(selectedWorkflow.flags?.includes("assessment")
+        ? ["integrity", "depth"]
+        : []),
+      ...(selectedWorkflow.flags?.includes("adaptation")
+        ? ["accessibility", "culture"]
+        : []),
+      ...(selectedWorkflow.flags?.includes("sourceAware") ? ["sources"] : []),
+    ]);
+    const ordered = [
+      ...ADD_ONS.filter((item) => priorityIds.has(item.id)),
+      ...ADD_ONS.filter((item) => !priorityIds.has(item.id)),
+    ];
+    return showAllAddOns ? ordered : ordered.slice(0, 8);
+  }, [addOns, selectedWorkflow, showAllAddOns]);
+
+  const advancedSettingsActive = Boolean(
+    form.priorKnowledge ||
+      form.countryRegion ||
+      form.successEvidence ||
+      form.resourceLimits ||
+      form.mustAvoid ||
+      form.sourceMaterial ||
+      form.taskMaterial ||
+      form.collaborationStyle !== initialForm.collaborationStyle ||
+      form.outputForm !== initialForm.outputForm,
+  );
 
   const updateField =
     (field: keyof FormState) =>
@@ -108,14 +171,49 @@ export default function PromptStudio() {
     };
 
   const chooseWorkflow = (workflow: PromptWorkflow) => {
+    const savedDraft = workflowDrafts[workflow.id];
+    const classroomCategories = new Set([
+      "Plan",
+      "Teach",
+      "Assess",
+      "Resources",
+      "Support",
+      "Feedback",
+    ]);
+    const canCarryTeachingContext =
+      classroomCategories.has(selectedWorkflow.category) &&
+      classroomCategories.has(workflow.category);
+
+    setWorkflowDrafts((current) => ({
+      ...current,
+      [selectedWorkflow.id]: {
+        topic: form.topic,
+        objective: form.objective,
+        duration: form.duration,
+        details: form.details,
+        sourceMaterial: form.sourceMaterial,
+        taskMaterial: form.taskMaterial,
+        successEvidence: form.successEvidence,
+        resourceLimits: form.resourceLimits,
+        mustAvoid: form.mustAvoid,
+      },
+    }));
     setSelectedWorkflow(workflow);
     setForm((current) => ({
       ...current,
-      objective: workflow.defaultGoal,
-      details: "",
-      sourceMaterial: "",
+      topic: savedDraft?.topic ?? (canCarryTeachingContext ? current.topic : ""),
+      objective: savedDraft?.objective ?? workflow.defaultGoal,
+      duration:
+        savedDraft?.duration ?? (canCarryTeachingContext ? current.duration : ""),
+      details: savedDraft?.details ?? "",
+      sourceMaterial: savedDraft?.sourceMaterial ?? "",
+      taskMaterial: savedDraft?.taskMaterial ?? "",
+      successEvidence: savedDraft?.successEvidence ?? "",
+      resourceLimits: savedDraft?.resourceLimits ?? "",
+      mustAvoid: savedDraft?.mustAvoid ?? "",
     }));
     setAddOns(workflow.defaultAddOns);
+    setShowAllAddOns(false);
     setCopyStatus(`${workflow.title} starter applied.`);
   };
 
@@ -131,9 +229,30 @@ export default function PromptStudio() {
   const focusFirstError = () => {
     const first = errors[0];
     if (!first?.field) return;
-    const target = document.getElementById(`field-${first.field}`);
-    target?.focus();
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    focusIssue(first.field);
+  };
+
+  const focusIssue = (field?: keyof BuilderInput) => {
+    if (!field) return;
+    const advancedFields = new Set<keyof BuilderInput>([
+      "priorKnowledge",
+      "countryRegion",
+      "successEvidence",
+      "resourceLimits",
+      "mustAvoid",
+      "sourceMaterial",
+      "taskMaterial",
+      "collaborationStyle",
+      "outputForm",
+    ]);
+    if (mode === "Quick" && advancedFields.has(field)) {
+      setMode("Advanced");
+    }
+    window.setTimeout(() => {
+      const target = document.getElementById(`field-${field}`);
+      target?.focus();
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
   };
 
   const copyPrompt = async () => {
@@ -188,11 +307,40 @@ export default function PromptStudio() {
     setCopyStatus("Prompt downloaded as a text file.");
   };
 
+  const copyRefinement = async (label: string, prompt: string) => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopyStatus(`${label} follow-up copied.`);
+    } catch {
+      setCopyStatus("Could not copy the follow-up. Select and copy it manually from your browser.");
+    }
+  };
+
+  const clearAdvancedSettings = () => {
+    setForm((current) => ({
+      ...current,
+      priorKnowledge: "",
+      countryRegion: "",
+      successEvidence: "",
+      resourceLimits: "",
+      mustAvoid: "",
+      sourceMaterial: "",
+      taskMaterial: "",
+      collaborationStyle: initialForm.collaborationStyle,
+      outputForm: initialForm.outputForm,
+    }));
+    setCopyStatus("Advanced settings cleared.");
+  };
+
   const resetBuilder = () => {
     setSelectedWorkflow(DEFAULT_WORKFLOW);
     setForm(initialForm);
     setAddOns(DEFAULT_WORKFLOW.defaultAddOns);
     setMode("Quick");
+    setCategory("All");
+    setSearch("");
+    setShowAllAddOns(false);
+    setWorkflowDrafts({});
     setCopyStatus("Example restored.");
   };
 
@@ -217,7 +365,7 @@ export default function PromptStudio() {
             <span aria-hidden="true">●</span> Nothing is sent or stored
           </span>
           <a className="header-link" href="#workflow-library">
-            {WORKFLOWS.length} starters
+            {WORKFLOWS.length} expert workflows
           </a>
         </div>
       </header>
@@ -225,15 +373,16 @@ export default function PromptStudio() {
       <section className="hero" id="top" aria-labelledby="hero-title">
         <div className="hero-copy">
           <div className="eyebrow">
-            JEE-grade precision <span aria-hidden="true">→</span> every subject
+            Adaptive prompt architecture <span aria-hidden="true">→</span> every teacher
           </div>
           <h1 id="hero-title">
-            Start with the <em>teaching job.</em>
-            <br />We&apos;ll build the prompt.
+            Describe the <em>teaching challenge.</em>
+            <br />Get a prompt that thinks ahead.
           </h1>
           <p>
-            Choose what you need, add your classroom context, and get a clear,
-            review-ready prompt for any AI tool—without learning prompt jargon.
+            The studio turns your context into an expert prompt with pedagogy,
+            cognitive demand, evidence, constraints, source boundaries and a
+            built-in audit—ready for any capable AI tool.
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="#builder">
@@ -260,8 +409,8 @@ export default function PromptStudio() {
           <div className="proof-card proof-card-small proof-card-accent">
             <span aria-hidden="true">◇</span>
             <p>
-              <strong>Safer prompts</strong>
-              <br />Privacy, sources & review built in
+              <strong>Brainier by design</strong>
+              <br />Diagnose, create, stress-test & repair
             </p>
           </div>
         </div>
@@ -272,7 +421,7 @@ export default function PromptStudio() {
           <div>
             <span className="section-number">01</span>
             <p className="section-kicker">Prompt workspace</p>
-            <h2 id="builder-title">Build from a teaching workflow</h2>
+            <h2 id="builder-title">Engineer a remarkable teaching prompt</h2>
           </div>
           <div className="mode-switch" aria-label="Builder detail level">
             {(["Quick", "Advanced"] as BuilderMode[]).map((item) => (
@@ -289,6 +438,20 @@ export default function PromptStudio() {
           </div>
         </div>
 
+        {mode === "Quick" && advancedSettingsActive && (
+          <div className="advanced-active-banner" role="status">
+            <span>Advanced settings are still shaping this prompt.</span>
+            <div>
+              <button type="button" onClick={() => setMode("Advanced")}>
+                Review
+              </button>
+              <button type="button" onClick={clearAdvancedSettings}>
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="workspace">
           <aside
             className="workflow-panel"
@@ -300,7 +463,10 @@ export default function PromptStudio() {
                 <span className="panel-step">A</span>
                 <h3 id="workflow-heading">Choose a starter</h3>
               </div>
-              <span className="result-count">{filteredWorkflows.length}</span>
+              <span className="result-count" aria-live="polite">
+                {filteredWorkflows.length}
+                <span className="sr-only"> workflows found</span>
+              </span>
             </div>
 
             <label className="search-field">
@@ -391,7 +557,61 @@ export default function PromptStudio() {
               </div>
             </div>
 
+            <fieldset className="power-mode-picker">
+              <legend>Choose the prompt intelligence</legend>
+              <p>Each level changes the reasoning architecture, not just the length.</p>
+              <div className="power-mode-grid">
+                {POWER_MODES.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={form.powerMode === item.id ? "selected" : ""}
+                    aria-pressed={form.powerMode === item.id}
+                    onClick={() => {
+                      setForm((current) => ({ ...current, powerMode: item.id }));
+                      setCopyStatus("");
+                    }}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.summary}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
             <div className="form-grid">
+              <label className="field">
+                <span>Educator role</span>
+                <input
+                  id="field-educatorRole"
+                  list="educator-role-options"
+                  value={form.educatorRole}
+                  onChange={updateField("educatorRole")}
+                  placeholder="Choose or type any educator role"
+                />
+                <datalist id="educator-role-options">
+                  {EDUCATOR_ROLES.map((role) => (
+                    <option key={role}>{role}</option>
+                  ))}
+                </datalist>
+              </label>
+
+              <label className="field">
+                <span>Teaching setting</span>
+                <input
+                  id="field-teachingSetting"
+                  list="teaching-setting-options"
+                  value={form.teachingSetting}
+                  onChange={updateField("teachingSetting")}
+                  placeholder="Choose or type any setting"
+                />
+                <datalist id="teaching-setting-options">
+                  {TEACHING_SETTINGS.map((setting) => (
+                    <option key={setting}>{setting}</option>
+                  ))}
+                </datalist>
+              </label>
+
               <label className="field">
                 <span>Subject / teaching area</span>
                 <select
@@ -422,7 +642,10 @@ export default function PromptStudio() {
                 <label className="field field-wide">
                   <span>Your subject or teaching area *</span>
                   <input
-                    id="field-customSubject"
+                  id="field-customSubject"
+                    required
+                    aria-required="true"
+                    aria-invalid={!form.customSubject}
                     value={form.customSubject}
                     onChange={updateField("customSubject")}
                     placeholder="e.g. Marine engineering, Bharatanatyam, clinical communication"
@@ -434,7 +657,10 @@ export default function PromptStudio() {
                 <label className="field field-wide">
                   <span>Your learner level or age range *</span>
                   <input
-                    id="field-customLevel"
+                  id="field-customLevel"
+                    required
+                    aria-required="true"
+                    aria-invalid={!form.customLevel}
                     value={form.customLevel}
                     onChange={updateField("customLevel")}
                     placeholder="e.g. mixed-age adult beginners"
@@ -446,6 +672,9 @@ export default function PromptStudio() {
                 <span>Topic or scope *</span>
                 <input
                   id="field-topic"
+                  required
+                  aria-required="true"
+                  aria-invalid={!form.topic.trim()}
                   value={form.topic}
                   onChange={updateField("topic")}
                   placeholder="Be specific—an empty topic never means full syllabus"
@@ -462,6 +691,9 @@ export default function PromptStudio() {
                 <span>Learning goal or purpose *</span>
                 <textarea
                   id="field-objective"
+                  required
+                  aria-required="true"
+                  aria-invalid={!form.objective.trim()}
                   rows={3}
                   value={form.objective}
                   onChange={updateField("objective")}
@@ -515,6 +747,32 @@ export default function PromptStudio() {
                 />
               </label>
 
+              <label className="field">
+                <span>Pedagogical lens</span>
+                <select
+                  id="field-pedagogyLens"
+                  value={form.pedagogyLens}
+                  onChange={updateField("pedagogyLens")}
+                >
+                  {PEDAGOGY_LENSES.map((lens) => (
+                    <option key={lens}>{lens}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Cognitive demand</span>
+                <select
+                  id="field-cognitiveDemand"
+                  value={form.cognitiveDemand}
+                  onChange={updateField("cognitiveDemand")}
+                >
+                  {COGNITIVE_DEMANDS.map((demand) => (
+                    <option key={demand}>{demand}</option>
+                  ))}
+                </select>
+              </label>
+
               {mode === "Advanced" && (
                 <div className="advanced-fields field-wide">
                   <div className="advanced-heading">
@@ -533,7 +791,27 @@ export default function PromptStudio() {
                     />
                   </label>
 
+                  <label className="field field-wide">
+                    <span>What would count as success?</span>
+                    <textarea
+                      id="field-successEvidence"
+                      rows={2}
+                      value={form.successEvidence}
+                      onChange={updateField("successEvidence")}
+                      placeholder="Name the observable learner action, audience response, product quality or decision the result should enable."
+                    />
+                  </label>
+
                   <div className="form-grid nested-grid">
+                    <label className="field">
+                      <span>Country, region or system</span>
+                      <input
+                        id="field-countryRegion"
+                        value={form.countryRegion}
+                        onChange={updateField("countryRegion")}
+                        placeholder="e.g. India, Scotland, Ontario"
+                      />
+                    </label>
                     <label className="field">
                       <span>Modality</span>
                       <select
@@ -585,14 +863,72 @@ export default function PromptStudio() {
                     </label>
                   </div>
 
+                  <div className="form-grid nested-grid">
+                    <label className="field">
+                      <span>Resources and practical limits</span>
+                      <textarea
+                        id="field-resourceLimits"
+                        rows={3}
+                        value={form.resourceLimits}
+                        onChange={updateField("resourceLimits")}
+                        placeholder="Space, materials, devices, bandwidth, staffing, budget or printing limits"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Must avoid or preserve</span>
+                      <textarea
+                        id="field-mustAvoid"
+                        rows={3}
+                        value={form.mustAvoid}
+                        onChange={updateField("mustAvoid")}
+                        placeholder="e.g. no invented citations; preserve the rubric; avoid public performance"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>How should the AI collaborate?</span>
+                      <select
+                        id="field-collaborationStyle"
+                        value={form.collaborationStyle}
+                        onChange={updateField("collaborationStyle")}
+                      >
+                        {COLLABORATION_STYLES.map((style) => (
+                          <option key={style}>{style}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Output form</span>
+                      <select
+                        id="field-outputForm"
+                        value={form.outputForm}
+                        onChange={updateField("outputForm")}
+                      >
+                        {OUTPUT_FORMS.map((formName) => (
+                          <option key={formName}>{formName}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
                   <label className="field field-wide">
-                    <span>Source or reference material</span>
+                    <span>Task material to analyse or transform</span>
+                    <textarea
+                      id="field-taskMaterial"
+                      rows={5}
+                      value={form.taskMaterial}
+                      onChange={updateField("taskMaterial")}
+                      placeholder="Paste the anonymised student work, existing assessment, lesson, assignment, data or draft being analysed. It is encoded as untrusted reference data."
+                    />
+                  </label>
+
+                  <label className="field field-wide">
+                    <span>Authoritative source or reference material</span>
                     <textarea
                       id="field-sourceMaterial"
                       rows={5}
                       value={form.sourceMaterial}
                       onChange={updateField("sourceMaterial")}
-                      placeholder="Paste a curriculum extract, reading, policy or anonymized student work. The generated prompt treats it as data, not instructions."
+                      placeholder="Paste a curriculum extract, reading, rubric, policy or verified reference. The generated prompt treats it as data, not instructions."
                     />
                   </label>
                 </div>
@@ -600,10 +936,10 @@ export default function PromptStudio() {
             </div>
 
             <fieldset className="add-ons">
-              <legend>Useful add-ons</legend>
-              <p>Only selected instructions are included in the prompt.</p>
+              <legend>Contextual power-ups</legend>
+              <p>Recommended options appear first. Each selected power-up also updates the output contract.</p>
               <div className="add-on-grid">
-                {ADD_ONS.map((item) => {
+                {visibleAddOns.map((item) => {
                   const selected = addOns.includes(item.id);
                   return (
                     <button
@@ -619,6 +955,15 @@ export default function PromptStudio() {
                   );
                 })}
               </div>
+              <button
+                type="button"
+                className="more-add-ons"
+                onClick={() => setShowAllAddOns((current) => !current)}
+              >
+                {showAllAddOns
+                  ? "Show recommended only"
+                  : `Show all ${ADD_ONS.length} power-ups`}
+              </button>
             </fieldset>
 
             <div className="brief-footer">
@@ -651,13 +996,13 @@ export default function PromptStudio() {
 
               <div className="quality-card">
                 <div className="quality-copy">
-                  <span>Brief quality</span>
+                  <span>Brief readiness</span>
                   <strong>{result.status}</strong>
                 </div>
                 <div
                   className="quality-meter"
                   role="meter"
-                  aria-label="Prompt brief quality"
+                  aria-label="Prompt brief readiness"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={result.score}
@@ -667,17 +1012,40 @@ export default function PromptStudio() {
                 <span className="quality-score">{result.score}/100</span>
               </div>
 
+              <div className="prompt-dna" aria-label="Prompt readiness dimensions">
+                {result.readiness.map((dimension) => (
+                  <span
+                    key={dimension.id}
+                    className={dimension.ready ? "ready" : "needs-work"}
+                    title={dimension.ready ? `${dimension.label} is ready` : dimension.hint}
+                  >
+                    <i aria-hidden="true">{dimension.ready ? "✓" : "·"}</i>
+                    {dimension.label}
+                  </span>
+                ))}
+              </div>
+
               {(errors.length > 0 || warnings.length > 0) && (
                 <div className="issue-box" aria-live="polite">
                   {errors.map((issue) => (
-                    <p className="issue-error" key={issue.message}>
+                    <button
+                      type="button"
+                      className="issue-error"
+                      key={issue.message}
+                      onClick={() => focusIssue(issue.field)}
+                    >
                       <span aria-hidden="true">!</span> {issue.message}
-                    </p>
+                    </button>
                   ))}
                   {warnings.map((issue) => (
-                    <p className="issue-warning" key={issue.message}>
+                    <button
+                      type="button"
+                      className="issue-warning"
+                      key={issue.message}
+                      onClick={() => focusIssue(issue.field)}
+                    >
                       <span aria-hidden="true">i</span> {issue.message}
-                    </p>
+                    </button>
                   ))}
                 </div>
               )}
@@ -726,6 +1094,27 @@ export default function PromptStudio() {
                 {copyStatus || "Every edit updates this prompt immediately."}
               </p>
 
+              <div className="refinement-pack">
+                <div className="refinement-heading">
+                  <span>Follow-up prompt pack</span>
+                  <strong>Go further without starting over</strong>
+                </div>
+                <div className="refinement-grid">
+                  {result.refinements.map((refinement) => (
+                    <button
+                      type="button"
+                      key={refinement.id}
+                      onClick={() =>
+                        copyRefinement(refinement.label, refinement.prompt)
+                      }
+                    >
+                      <strong>{refinement.label}</strong>
+                      <span>{refinement.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="privacy-note">
                 <span aria-hidden="true">○</span>
                 <p>
@@ -738,15 +1127,50 @@ export default function PromptStudio() {
         </div>
       </section>
 
+      <section className="intelligence" aria-labelledby="intelligence-title">
+        <div className="intelligence-heading">
+          <span className="section-number">02</span>
+          <p className="section-kicker">The intelligence layer</p>
+          <h2 id="intelligence-title">More than a longer prompt.</h2>
+          <p>
+            The compiler builds an instruction hierarchy, aligns the goal to
+            evidence, applies a subject-appropriate method, then asks the AI to
+            verify and repair its own result before returning it.
+          </p>
+        </div>
+        <div className="intelligence-grid">
+          <article>
+            <span>01</span>
+            <strong>Diagnose first</strong>
+            <p>Finds missing facts, contradictions, source gaps and validity risks.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Design with intent</strong>
+            <p>Connects learner action, evidence, pedagogy and cognitive demand.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Diverge intelligently</strong>
+            <p>Breakthrough mode compares genuinely different routes before synthesising.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <strong>Stress-test and repair</strong>
+            <p>Checks truth, feasibility, access, totals and internal coherence.</p>
+          </article>
+        </div>
+      </section>
+
       <section className="coverage" aria-labelledby="coverage-title">
         <div className="coverage-heading">
-          <span className="section-number">02</span>
+          <span className="section-number">03</span>
           <p className="section-kicker">Designed around teacher work</p>
           <h2 id="coverage-title">One builder. The whole teaching cycle.</h2>
           <p>
-            The old question-paper tool is now one specialist workflow inside a
-            broader studio—from planning and explanation to feedback, family
-            communication and professional reflection.
+            From play-based learning and clinical skills to JEE practice,
+            university courses, family conferences and action research—each
+            workflow has its own method and quality gates.
           </p>
         </div>
         <div className="coverage-grid">
@@ -769,13 +1193,13 @@ export default function PromptStudio() {
       <section className="principles" aria-labelledby="principles-title">
         <div className="principles-card">
           <div>
-            <span className="section-number">03</span>
+            <span className="section-number">04</span>
             <p className="section-kicker">Built-in guardrails</p>
             <h2 id="principles-title">Useful beats “perfect.”</h2>
             <p>
-              No AI output is error-proof. Every prompt asks for checks,
-              uncertainty flags, source honesty, accessible structure and a
-              final teacher review.
+              No AI output is error-proof. Every prompt now includes a trust
+              boundary, uncertainty protocol, workflow-specific checks and a
+              final teacher verification ledger.
             </p>
           </div>
           <ul>
@@ -789,15 +1213,15 @@ export default function PromptStudio() {
             <li>
               <span>02</span>
               <div>
-                <strong>No stale output</strong>
-                <p>The live prompt changes with every field and option.</p>
+                <strong>No hidden reference instructions</strong>
+                <p>Pasted content is encoded as untrusted data, never command text.</p>
               </div>
             </li>
             <li>
               <span>03</span>
               <div>
-                <strong>No invented official rules</strong>
-                <p>Exam schemes, standards and sources must be supplied or verified.</p>
+                <strong>No one-pass complacency</strong>
+                <p>Expert modes diagnose, build, stress-test and repair before returning.</p>
               </div>
             </li>
             <li>

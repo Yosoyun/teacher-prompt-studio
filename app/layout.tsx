@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 const metadataBase: Metadata = {
-  title: "Teacher Prompt Studio | Prompts for every classroom",
+  title: "Teacher Prompt Studio | Adaptive prompts for every teacher",
   description:
-    "Build clear, review-ready AI prompts for lessons, assessments, resources, differentiation, feedback, communication and professional learning.",
+    "Build next-level teacher prompts with adaptive reasoning, pedagogy, cognitive demand, evidence alignment, source boundaries and built-in quality checks.",
   applicationName: "Teacher Prompt Studio",
   keywords: [
     "teacher prompt builder",
@@ -13,6 +13,9 @@ const metadataBase: Metadata = {
     "assessment prompt",
     "JEE prompt builder",
     "teaching AI tools",
+    "AI prompt architect for teachers",
+    "Socratic tutor prompt",
+    "curriculum and assessment design",
   ],
   authors: [{ name: "Indrajeet Yadav" }],
   creator: "Indrajeet Yadav",
@@ -44,7 +47,7 @@ export async function generateMetadata(): Promise<Metadata> {
         ? "http"
         : "https";
   const origin = `${protocol}://${host}`;
-  const imageUrl = `${origin}/og.png`;
+  const imageUrl = `${origin}/og-v2.png`;
 
   return {
     ...metadataBase,
@@ -55,13 +58,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Teacher Prompt Studio",
       title: "Teacher Prompt Studio",
       description:
-        "Start with the teaching job. We’ll build the prompt—43 workflows for any subject and learner level.",
+        "Describe the teaching challenge. Get a prompt that thinks ahead—79 expert workflows with adaptive reasoning and built-in quality checks.",
       images: [
         {
           url: imageUrl,
           width: 1731,
           height: 909,
-          alt: "Teacher Prompt Studio — start with the teaching job, and we’ll build the prompt.",
+          alt: "Teacher Prompt Studio — describe the teaching challenge and get a prompt that thinks ahead.",
         },
       ],
     },
@@ -69,7 +72,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Teacher Prompt Studio",
       description:
-        "43 review-ready prompt workflows for teachers in any subject.",
+        "79 expert teacher workflows powered by adaptive prompt architecture.",
       images: [imageUrl],
     },
   };

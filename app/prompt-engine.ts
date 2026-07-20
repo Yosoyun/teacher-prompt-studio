@@ -228,9 +228,9 @@ export function validatePromptInput(input: BuilderInput): PromptIssue[] {
     )
   ) {
     issues.push({
-      severity: "warning",
+      severity: "error",
       field: "taskMaterial",
-      message: "Possible contact details detected. Replace identifiable information with anonymous placeholders before copying.",
+      message: "Possible email, phone number or personal identifier detected. Remove it before copying anything to an external AI provider.",
     });
   }
 

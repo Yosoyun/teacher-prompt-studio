@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type MouseEvent,
   type ReactNode,
 } from "react";
 import ArtifactStage from "./ArtifactStage";
@@ -119,7 +118,7 @@ const STEP_META: Array<{
   { id: 0, label: "Choose", short: "What to make", description: "Pick a ready teaching mission" },
   { id: 1, label: "Fit", short: "Your classroom", description: "Board, class, subject and chapter" },
   { id: 2, label: "Finish", short: "Real files", description: "Choose format, polish and power-ups" },
-  { id: 3, label: "Create", short: "Launch AI", description: "Build the artifact and improve it" },
+  { id: 3, label: "Launch AI", short: "Create files", description: "Choose an AI, copy the instructions and create the artifact" },
 ];
 
 const unique = (items: string[]) => [...new Set(items)];
@@ -172,17 +171,26 @@ export default function PromptStudio() {
   const [showAllAddOns, setShowAllAddOns] = useState(false);
   const [showAllFormats, setShowAllFormats] = useState(false);
   const [launched, setLaunched] = useState(false);
+  const [launchStatus, setLaunchStatus] = useState("");
+  const [launchingProviderId, setLaunchingProviderId] = useState<string | null>(null);
+  const [manualProviderId, setManualProviderId] = useState<string | null>(null);
   const [followUpTrail, setFollowUpTrail] = useState<string[]>([]);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const expertDetailsRef = useRef<HTMLDetailsElement>(null);
+  const launchPanelRef = useRef<HTMLElement>(null);
+  const technicalPromptRef = useRef<HTMLDetailsElement>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const firstStepChange = useRef(true);
 
   const selectedRecipe = STUDIO_RECIPES.find((recipe) => recipe.id === selectedRecipeId);
   const selectedBoard = BOARD_OPTIONS.find((board) => board.id === boardId) ?? BOARD_OPTIONS[0];
   const artifact = getArtifactProfile(artifactId);
   const selectedProvider = AI_PROVIDERS.find((provider) => provider.id === selectedProviderId) ?? AI_PROVIDERS[0];
+  const manualProvider = manualProviderId
+    ? AI_PROVIDERS.find((provider) => provider.id === manualProviderId)
+    : undefined;
   const visualStyle = VISUAL_STYLES.find((style) => style.id === visualStyleId) ?? VISUAL_STYLES[0];
   const finish = FINISH_LEVELS.find((item) => item.id === finishId) ?? FINISH_LEVELS[1];
   const selectedAssessmentProfile = ASSESSMENT_PROFILES.find((profile) => profile.id === assessmentProfileId) ?? ASSESSMENT_PROFILES[0];
@@ -255,7 +263,14 @@ export default function PromptStudio() {
       firstStepChange.current = false;
       return;
     }
-    window.setTimeout(() => stepHeadingRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      if (activeStep === 3 && launchPanelRef.current) {
+        launchPanelRef.current.focus();
+        launchPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      stepHeadingRef.current?.focus();
+    }, 0);
   }, [activeStep]);
 
   const builderInput: BuilderInput = useMemo(
@@ -333,6 +348,10 @@ export default function PromptStudio() {
   const recommendedProviders = artifact.recommendedProviders
     .map((id) => AI_PROVIDERS.find((provider) => provider.id === id))
     .filter((provider): provider is (typeof AI_PROVIDERS)[number] => Boolean(provider));
+  const launchProviders = [
+    ...recommendedProviders,
+    ...AI_PROVIDERS.filter((provider) => !artifact.recommendedProviders.includes(provider.id)),
+  ];
 
   const visibleArtifacts = useMemo(() => {
     const recommended = ARTIFACT_PROFILES.filter((profile) =>
@@ -350,6 +369,8 @@ export default function PromptStudio() {
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm((current) => ({ ...current, [field]: event.target.value }));
       setCopyStatus("");
+      setLaunchStatus("");
+      setManualProviderId(null);
     };
 
   const moveToStep = (step: StepId) => {
@@ -384,6 +405,8 @@ export default function PromptStudio() {
     }));
     setAddOns(unique([...workflow.defaultAddOns, ...recipe.addOns]));
     setLaunched(false);
+    setLaunchStatus("");
+    setManualProviderId(null);
     setFollowUpTrail([]);
     setCopyStatus(`${recipe.shortTitle} selected. The best file format is already recommended.`);
     advanceTo(1);
@@ -406,6 +429,10 @@ export default function PromptStudio() {
         : "Ready-to-use final artifact",
     }));
     setAddOns(workflow.defaultAddOns);
+    setLaunched(false);
+    setLaunchStatus("");
+    setManualProviderId(null);
+    setFollowUpTrail([]);
     setCopyStatus(`${workflow.title} loaded with a real-file delivery plan.`);
     advanceTo(1);
   };
@@ -491,6 +518,8 @@ export default function PromptStudio() {
     setArtifactFamily(next.family);
     setSelectedProviderId(next.recommendedProviders[0]);
     setLaunched(false);
+    setLaunchStatus("");
+    setManualProviderId(null);
     setCopyStatus(`${next.shortLabel} selected. The file contract and quality checks changed immediately.`);
   };
 
@@ -507,18 +536,33 @@ export default function PromptStudio() {
       await navigator.clipboard.writeText(text);
       return true;
     } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.setAttribute("aria-hidden", "true");
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("aria-hidden", "true");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        return copied;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  const revealPromptForManualCopy = () => {
+    if (technicalPromptRef.current) technicalPromptRef.current.open = true;
+    window.setTimeout(() => {
+      const textarea = promptTextareaRef.current;
+      if (!textarea) return;
       textarea.focus();
       textarea.select();
-      const copied = document.execCommand("copy");
-      textarea.remove();
-      return copied;
-    }
+      textarea.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
   };
 
   const focusIssue = (field?: keyof BuilderInput) => {
@@ -547,29 +591,89 @@ export default function PromptStudio() {
     }, 0);
   };
 
-  const prepareProvider = (event: MouseEvent<HTMLAnchorElement>, providerName: string) => {
+  const prepareProvider = async (providerId: string) => {
+    const provider = AI_PROVIDERS.find((item) => item.id === providerId) ?? selectedProvider;
+    setSelectedProviderId(provider.id);
+    setManualProviderId(null);
     setAttemptedAction(true);
     const current = currentPromptResult();
     const currentErrors = current.issues.filter((issue) => issue.severity === "error");
     if (currentErrors.length) {
-      event.preventDefault();
-      setCopyStatus("One essential classroom detail is missing. Fix it before creating the file.");
-      focusIssue(currentErrors[0].field);
+      setLaunched(false);
+      const message = "Launch is ready, but one required detail still needs your attention. Use the visible Fix this detail button; your AI choices will stay here.";
+      setLaunchStatus(message);
+      setCopyStatus(message);
       return;
     }
-    setLaunched(true);
-    void copyText(current.prompt).then((copied) => {
-      setCopyStatus(copied
-        ? `${providerName} opened. Paste once—the AI has exact instructions to attach ${artifact.shortLabel}, not ordinary text.`
-        : `The AI opened, but clipboard access was blocked. Use “Copy build instructions” below.`);
-    });
+
+    // Reserve the tab during the trusted click. We only navigate it after the
+    // instructions are safely copied, so a teacher never lands in an empty AI chat.
+    const launchWindow = window.open("about:blank", "_blank");
+    if (launchWindow) {
+      try {
+        launchWindow.opener = null;
+        launchWindow.document.title = `Preparing ${provider.name}…`;
+        launchWindow.document.body.style.cssText = "margin:0;display:grid;min-height:100vh;place-items:center;background:#0c1d19;color:#f8fff1;font:700 18px system-ui,sans-serif;text-align:center;padding:24px";
+        launchWindow.document.body.textContent = `Preparing ${provider.name} and copying your build instructions…`;
+        launchWindow.blur();
+        window.focus();
+      } catch {
+        // The reserved tab is still safe to navigate even if its interim page cannot be styled.
+      }
+    }
+
+    setLaunchingProviderId(provider.id);
+    setLaunchStatus(`Copying the build instructions and starting ${provider.name}…`);
+    const copied = await copyText(current.prompt);
+    try {
+      if (copied) {
+        setLaunched(true);
+        let providerOpened = false;
+        if (launchWindow && !launchWindow.closed) {
+          launchWindow.location.replace(provider.url);
+          launchWindow.focus();
+          providerOpened = true;
+        } else {
+          setManualProviderId(provider.id);
+        }
+        const message = providerOpened
+          ? `${provider.name} is opening and the instructions are copied. Paste once in the new chat to create ${artifact.shortLabel}.`
+          : `Instructions copied. Your browser blocked the new tab—use Open ${provider.name} below, then paste once.`;
+        setLaunchStatus(message);
+        setCopyStatus(message);
+      } else {
+        launchWindow?.close();
+        window.focus();
+        setLaunched(false);
+        setManualProviderId(provider.id);
+        const message = `Clipboard access was blocked, so ${provider.name} was not opened. The full instructions are selected below—copy them, then use Open ${provider.name}.`;
+        setLaunchStatus(message);
+        setCopyStatus(message);
+        revealPromptForManualCopy();
+      }
+    } catch {
+      launchWindow?.close();
+      window.focus();
+      setLaunched(false);
+      setManualProviderId(provider.id);
+      const message = `The ${provider.name} handoff could not finish. The full instructions are selected below—copy them, then use Open ${provider.name}.`;
+      setLaunchStatus(message);
+      setCopyStatus(message);
+      revealPromptForManualCopy();
+    } finally {
+      setLaunchingProviderId(null);
+    }
   };
 
   const copyPrompt = async () => {
     const copied = await copyText(currentPromptResult().prompt);
-    setCopyStatus(copied
-      ? `Build instructions copied. They demand ${artifact.shortLabel} and reject a normal chat answer.`
-      : "Copy was blocked. The technical instructions are selected for manual copying.");
+    const message = copied
+      ? `Build instructions copied. Open any AI below and paste once to create ${artifact.shortLabel}.`
+      : "Copy was blocked. The technical instructions are open and selected for manual copying.";
+    setManualProviderId(copied ? null : selectedProvider.id);
+    setLaunchStatus(message);
+    setCopyStatus(message);
+    if (!copied) revealPromptForManualCopy();
   };
 
   const copyFollowUp = async (id: string) => {
@@ -621,6 +725,10 @@ export default function PromptStudio() {
       powerMode: recipe.powerMode ?? "Breakthrough",
     }));
     setAddOns(unique([...workflow.defaultAddOns, ...recipe.addOns]));
+    setLaunched(false);
+    setLaunchStatus("");
+    setManualProviderId(null);
+    setFollowUpTrail([]);
     setCopyStatus(`Surprise: ${recipe.shortTitle} · ${nextArtifact.shortLabel} · Class ${nextGrade} ${subject}.`);
     advanceTo(1);
   };
@@ -645,7 +753,11 @@ export default function PromptStudio() {
     setTimeIndex(3);
     setDifficultyIndex(1);
     setQuestionCount(20);
+    setSelectedProviderId(getArtifactProfile(DEFAULT_ARTIFACT).recommendedProviders[0]);
     setLaunched(false);
+    setLaunchStatus("");
+    setLaunchingProviderId(null);
+    setManualProviderId(null);
     setFollowUpTrail([]);
     setAttemptedAction(false);
     setCopyStatus("Fresh studio ready.");
@@ -1025,8 +1137,77 @@ export default function PromptStudio() {
 
             {activeStep === 3 && (
               <div className="step-content launch-step">
+                <section ref={launchPanelRef} tabIndex={-1} className="provider-choice" id="launch-ai" data-testid="launch-ai-panel" aria-labelledby="launch-ai-title">
+                  <div className="provider-launch-heading">
+                    <span>Launch AI · final step</span>
+                    <h3 id="launch-ai-title">Copy once. Open your AI. Paste.</h3>
+                    <p>The studio has already written the technical instructions. Choose an AI below—you do not need to compose or edit a prompt.</p>
+                  </div>
+
+                  <div className="handoff-steps" aria-label="Three-step AI handoff">
+                    <span><i>1</i><strong>Choose AI</strong><small>ChatGPT, Claude, Gemini or another</small></span>
+                    <b aria-hidden="true">→</b>
+                    <span><i>2</i><strong>Open + copy</strong><small>The instructions copy automatically</small></span>
+                    <b aria-hidden="true">→</b>
+                    <span><i>3</i><strong>Paste once</strong><small>The AI builds the requested files</small></span>
+                  </div>
+
+                  {errors.length > 0 && (
+                    <div className="launch-blocker" role="alert">
+                      <span><i>!</i><strong>One detail is needed before launch</strong><small>{errors[0].message}</small></span>
+                      <button type="button" onClick={() => focusIssue(errors[0].field)}>Fix this detail →</button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className={`create-artifact-button ${errors.length ? "blocked" : ""}`}
+                    onClick={() => void prepareProvider(selectedProvider.id)}
+                    disabled={Boolean(launchingProviderId)}
+                  >
+                    <span><strong>{launchingProviderId === selectedProvider.id ? `Preparing ${selectedProvider.name}…` : `Copy instructions & open ${selectedProvider.name}`}</strong><small>{errors.length ? "Fix the highlighted detail first—your AI choices will remain here" : `Start a fresh ${selectedProvider.name} chat for ${artifact.shortLabel}`}</small></span><i>↗</i>
+                  </button>
+
+                  <div className="provider-actions">
+                    <div className="choice-heading"><span>Or open another AI directly</span><small>Recommended choices appear first; every option stays visible</small></div>
+                    <button type="button" className="copy-only-button" onClick={copyPrompt} disabled={Boolean(launchingProviderId)}>Copy instructions only</button>
+                  </div>
+                  <div className="provider-cards" aria-label="Available AI providers">
+                    {launchProviders.map((provider, index) => {
+                      const recommended = artifact.recommendedProviders.includes(provider.id);
+                      return (
+                        <button
+                          type="button"
+                          data-provider={provider.id}
+                          className={selectedProviderId === provider.id ? "selected" : ""}
+                          onClick={() => void prepareProvider(provider.id)}
+                          disabled={Boolean(launchingProviderId)}
+                          key={provider.id}
+                        >
+                          <i>{provider.glyph}</i>
+                          <span><strong>{provider.name}</strong><small>{provider.note}</small></span>
+                          <em>{index === 0 ? "Best match" : recommended ? "Recommended" : "Available"}</em>
+                          <b>{launchingProviderId === provider.id ? "Preparing…" : "Copy & open ↗"}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="handoff-note">The selected AI opens in a new tab. Paste once; file-generation support can vary by provider, plan and model.</p>
+                  {launchStatus && <p className="launch-status" role="status" aria-live="polite">{launchStatus}</p>}
+                  {manualProvider && (
+                    <div className="manual-launch-recovery" role="group" aria-label={`${manualProvider.name} manual launch recovery`}>
+                      <span><strong>Safe fallback ready</strong><small>The full instructions are visible and selected. Copy them if needed before opening the AI.</small></span>
+                      <a href={manualProvider.url} target="_blank" rel="noopener noreferrer" onClick={() => {
+                        setLaunched(true);
+                        setManualProviderId(null);
+                        setLaunchStatus(`${manualProvider.name} opened. Paste the copied instructions once to create ${artifact.shortLabel}.`);
+                      }}>After copying, open {manualProvider.name} ↗</a>
+                    </div>
+                  )}
+                </section>
+
                 <div className="launch-receipt">
-                  <span>Ready to build</span>
+                  <span>What the AI will create</span>
                   <h3>{classLabel} {form.topic} · {artifact.shortLabel}</h3>
                   <p>{artifact.promise}</p>
                   <div className="receipt-files">
@@ -1040,31 +1221,11 @@ export default function PromptStudio() {
                   </ul>
                 </div>
 
-                {(errors.length > 0 || warnings.length > 0) && (
+                {warnings.length > 0 && (
                   <div className="launch-issues" aria-live="polite">
-                    {errors.map((issue) => <button type="button" onClick={() => focusIssue(issue.field)} key={issue.message}><strong>Fix first</strong>{issue.message}</button>)}
                     {warnings.slice(0, 2).map((issue) => <button type="button" className="warning" onClick={() => focusIssue(issue.field)} key={issue.message}><strong>Helpful check</strong>{issue.message}</button>)}
                   </div>
                 )}
-
-                <div className="provider-choice">
-                  <div className="choice-heading"><span>Choose where to create it</span><small>Best matches for this artifact appear first</small></div>
-                  <div className="provider-cards" role="radiogroup" aria-label="AI provider">
-                    {recommendedProviders.map((provider, index) => (
-                      <button type="button" role="radio" aria-checked={selectedProviderId === provider.id} className={selectedProviderId === provider.id ? "selected" : ""} onClick={() => setSelectedProviderId(provider.id)} key={provider.id}>
-                        <i>{provider.glyph}</i><span><strong>{provider.name}</strong><small>{index === 0 ? "Best match for this file" : "Also works well"}</small></span><b>{selectedProviderId === provider.id ? "✓" : ""}</b>
-                      </button>
-                    ))}
-                  </div>
-                  <a className="create-artifact-button" href={selectedProvider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, selectedProvider.name)}>
-                    <span><strong>{artifact.actionLabel} in {selectedProvider.name}</strong><small>Copies the build instructions and opens a fresh chat</small></span><i>↗</i>
-                  </a>
-                  <p className="handoff-note">Paste once in the new chat. The AI is told to attach the requested files; provider file capabilities may vary.</p>
-                  <details className="all-providers">
-                    <summary>Choose another AI</summary>
-                    <div>{AI_PROVIDERS.map((provider) => <a href={provider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, provider.name)} key={provider.id}><i>{provider.glyph}</i>{provider.name}<b>↗</b></a>)}</div>
-                  </details>
-                </div>
 
                 <div className={`followup-map ${launched ? "active" : ""}`}>
                   <div className="followup-heading">
@@ -1091,11 +1252,11 @@ export default function PromptStudio() {
                   )}
                 </div>
 
-                <details className="technical-prompt">
+                <details className="technical-prompt" ref={technicalPromptRef}>
                   <summary><span><strong>Advanced · inspect build instructions</strong><small>The teacher never needs to edit this</small></span><i>＋</i></summary>
                   <div>
                     <p>{result.prompt.length.toLocaleString()} characters · hidden creator marker included · file-delivery contract active</p>
-                    <textarea value={result.prompt} readOnly aria-label="Generated artifact build instructions" spellCheck={false} />
+                    <textarea ref={promptTextareaRef} value={result.prompt} readOnly aria-label="Generated artifact build instructions" spellCheck={false} />
                     <button type="button" onClick={copyPrompt}>Copy build instructions</button>
                   </div>
                 </details>
@@ -1133,7 +1294,7 @@ export default function PromptStudio() {
           {activeStep < 3 ? (
             <button type="button" className="next-button" onClick={goNext}>{nextLabel} →</button>
           ) : (
-            <a className="next-button" href={selectedProvider.url} target="_blank" rel="noopener noreferrer" onClick={(event) => prepareProvider(event, selectedProvider.name)}>{artifact.actionLabel} →</a>
+            <button type="button" className="next-button" disabled={Boolean(launchingProviderId)} onClick={() => void prepareProvider(selectedProvider.id)}>{launchingProviderId === selectedProvider.id ? `Preparing ${selectedProvider.name}…` : `Copy & open ${selectedProvider.name} →`}</button>
           )}
         </div>
       </section>

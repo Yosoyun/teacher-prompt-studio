@@ -131,6 +131,28 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(page, /FOLLOW_UP_PATHS/);
   assert.match(page, /artifact\.actionLabel/);
   assert.match(page, /AI_PROVIDERS/);
+  assert.match(page, /data-testid="launch-ai-panel"/);
+  assert.match(page, /launchProviders\.map/);
+  assert.match(page, /Copy instructions & open/);
+  assert.match(page, /prepareProvider\(provider\.id\)/);
+  assert.match(page, /revealPromptForManualCopy/);
+  assert.match(page, /technicalPromptRef\.current\.open = true/);
+  assert.match(page, /window\.open\("about:blank", "_blank"\)/);
+  assert.match(page, /launchWindow\.location\.replace\(provider\.url\)/);
+  assert.match(page, /launchWindow\?\.close\(\)/);
+  assert.match(page, /After copying, open \{manualProvider\.name\}/);
+  assert.doesNotMatch(page, /href=\{provider\.url\}[\s\S]{0,180}prepareProvider/);
+  const reserveTab = page.indexOf('window.open("about:blank", "_blank")');
+  const copyInstructions = page.indexOf("await copyText(current.prompt)", reserveTab);
+  const navigateProvider = page.indexOf("launchWindow.location.replace(provider.url)", copyInstructions);
+  assert.ok(reserveTab >= 0 && reserveTab < copyInstructions && copyInstructions < navigateProvider,
+    "provider navigation must wait until the copy attempt finishes");
+  assert.doesNotMatch(page, /focusIssue\(currentErrors\[0\]\.field\)/);
+  assert.doesNotMatch(page, /<details className="all-providers">/);
+  assert.ok(
+    page.indexOf('data-testid="launch-ai-panel"') < page.indexOf('className="launch-receipt"'),
+    "Launch AI must appear before the delivery receipt",
+  );
   assert.match(page, /ASSESSMENT_PROFILES/);
   assert.match(page, /STRUCTURED_ITEM_WORKFLOW_IDS/);
   assert.match(page, /"quiz-test"/);
@@ -226,6 +248,9 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(styles, /\.style-academic-editorial/);
   assert.match(styles, /\.style-technical-institute/);
   assert.match(styles, /\.assessment-profile-buttons/);
+  assert.match(styles, /\.maker-actions \{[\s\S]*position: fixed/);
+  assert.match(styles, /\.blueprint-panel \{[\s\S]*grid-row: 2/);
+  assert.match(styles, /\.provider-cards > button/);
   assert.match(layout, /Create real teaching artifacts/);
   assert.match(layout, /og-beast\.png/);
   assert.doesNotMatch(page, /download.*teacher-prompt\.txt/s);
@@ -242,4 +267,27 @@ test("preserves every promised positive assessment row at the minimum size", asy
   assert.equal(result.totalItems, 5);
   assert.deepEqual(result.rows.map((row) => row.count), [3, 1, 1]);
   assert.equal(result.rows.reduce((total, row) => total + row.count, 0), 5);
+});
+
+test("keeps every AI handoff valid and every artifact recommendation resolvable", async () => {
+  const [{ AI_PROVIDERS }, { ARTIFACT_PROFILES }] = await Promise.all([
+    import("../app/studio-presets.ts"),
+    import("../app/artifact-data.ts"),
+  ]);
+  const providerIds = new Set(AI_PROVIDERS.map((provider) => provider.id));
+
+  assert.ok(AI_PROVIDERS.length >= 7);
+  assert.deepEqual(
+    ["chatgpt", "claude", "gemini", "aistudio"].map((id) => providerIds.has(id)),
+    [true, true, true, true],
+  );
+  for (const provider of AI_PROVIDERS) {
+    assert.match(provider.url, /^https:\/\//);
+  }
+  for (const artifact of ARTIFACT_PROFILES) {
+    assert.ok(artifact.recommendedProviders.length > 0, `${artifact.id} needs a recommended AI`);
+    for (const providerId of artifact.recommendedProviders) {
+      assert.ok(providerIds.has(providerId), `${artifact.id} references missing provider ${providerId}`);
+    }
+  }
 });

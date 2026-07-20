@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 const metadataBase: Metadata = {
-  title: "Teacher Prompt Studio | Create real teaching artifacts",
+  title: "Teacher Prompt Studio | Dependable assessment production",
   description:
-    "Choose a classroom outcome and prepare exact AI instructions for real PDFs, DOCX files, slides, visuals, websites, flowcharts, workbooks and simulations.",
+    "Turn an Indian board, class and chapter into a production brief for separate student files, an editable master and teacher key—then reuse what works.",
   applicationName: "Teacher Prompt Studio",
   keywords: [
     "teacher prompt builder",
@@ -27,8 +27,8 @@ const metadataBase: Metadata = {
   authors: [{ name: "Teacher Prompt Studio" }],
   creator: "Teacher Prompt Studio",
   icons: {
-    icon: "/og.png",
-    shortcut: "/og.png",
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
   },
   robots: {
     index: true,
@@ -65,7 +65,7 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Teacher Prompt Studio",
       title: "Teacher Prompt Studio",
       description:
-        "Choose it, shape it, and create the actual artifact—PDFs, DOCX files, visuals, websites, workbooks and simulations for Indian classrooms.",
+        "Turn an Indian board, class and chapter into an exact assessment-production brief, hand it to your AI and reuse the setups that return usable files.",
       images: [
         {
           url: imageUrl,
@@ -79,7 +79,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Teacher Prompt Studio",
       description:
-        "A comfortable four-step maker for real teaching files, interactive resources and 79 expert workflows.",
+        "A four-step assessment-production system for Indian teachers, with real-file contracts and a private proof loop.",
       images: [imageUrl],
     },
   };

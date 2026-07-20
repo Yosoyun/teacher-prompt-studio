@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import ArtifactStage from "./ArtifactStage";
+import ImpactPanel from "./ImpactPanel";
 import { buildAssessmentSpec } from "./assessment-spec";
 import {
   ARTIFACT_FAMILIES,
@@ -39,6 +40,17 @@ import {
   buildTeacherPrompt,
   type BuilderInput,
 } from "./prompt-engine";
+import {
+  IMPACT_STORAGE_KEY,
+  createImpactEntry,
+  formatPilotSummary,
+  limitImpactLedger,
+  parseImpactLedger,
+  setImpactOutcome,
+  summarizeImpact,
+  type ImpactEntry,
+  type ImpactOutcome,
+} from "./impact-ledger";
 import {
   AI_PROVIDERS,
   BOARD_OPTIONS,
@@ -174,6 +186,12 @@ export default function PromptStudio() {
   const [launchStatus, setLaunchStatus] = useState("");
   const [launchingProviderId, setLaunchingProviderId] = useState<string | null>(null);
   const [manualProviderId, setManualProviderId] = useState<string | null>(null);
+  const [manualCopyText, setManualCopyText] = useState("");
+  const [manualCopyLabel, setManualCopyLabel] = useState("Build instructions");
+  const [impactEntries, setImpactEntries] = useState<ImpactEntry[]>([]);
+  const [activeImpactId, setActiveImpactId] = useState<string | null>(null);
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [impactReady, setImpactReady] = useState(false);
   const [followUpTrail, setFollowUpTrail] = useState<string[]>([]);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
@@ -208,6 +226,8 @@ export default function PromptStudio() {
     "End-of-unit assessment",
   ];
   const classLabel = audienceMode === "school" ? `Class ${grade}` : form.level;
+  const impactSummary = useMemo(() => summarizeImpact(impactEntries), [impactEntries]);
+  const activeImpact = impactEntries.find((entry) => entry.id === activeImpactId);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -257,6 +277,26 @@ export default function PromptStudio() {
       // A private browsing setting may disable local preferences; the builder still works.
     }
   }, [boardId, classSize, form.outputLanguage, form.subject, grade, profileReady]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setImpactEntries(parseImpactLedger(window.localStorage.getItem(IMPACT_STORAGE_KEY)));
+      } finally {
+        setImpactReady(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!impactReady) return;
+    try {
+      window.localStorage.setItem(IMPACT_STORAGE_KEY, JSON.stringify(impactEntries));
+    } catch {
+      // The impact loop remains usable for this session if local storage is unavailable.
+    }
+  }, [impactEntries, impactReady]);
 
   useEffect(() => {
     if (firstStepChange.current) {
@@ -371,6 +411,7 @@ export default function PromptStudio() {
       setCopyStatus("");
       setLaunchStatus("");
       setManualProviderId(null);
+      setManualCopyText("");
     };
 
   const moveToStep = (step: StepId) => {
@@ -407,6 +448,7 @@ export default function PromptStudio() {
     setLaunched(false);
     setLaunchStatus("");
     setManualProviderId(null);
+    setManualCopyText("");
     setFollowUpTrail([]);
     setCopyStatus(`${recipe.shortTitle} selected. The best file format is already recommended.`);
     advanceTo(1);
@@ -432,6 +474,7 @@ export default function PromptStudio() {
     setLaunched(false);
     setLaunchStatus("");
     setManualProviderId(null);
+    setManualCopyText("");
     setFollowUpTrail([]);
     setCopyStatus(`${workflow.title} loaded with a real-file delivery plan.`);
     advanceTo(1);
@@ -520,6 +563,7 @@ export default function PromptStudio() {
     setLaunched(false);
     setLaunchStatus("");
     setManualProviderId(null);
+    setManualCopyText("");
     setCopyStatus(`${next.shortLabel} selected. The file contract and quality checks changed immediately.`);
   };
 
@@ -530,6 +574,43 @@ export default function PromptStudio() {
   };
 
   const currentPromptResult = () => buildTeacherPrompt(builderInput);
+
+  const recordImpactPrepared = (provider: (typeof AI_PROVIDERS)[number]) => {
+    const entry = createImpactEntry({
+      mission: selectedRecipe?.shortTitle ?? selectedWorkflow.title,
+      artifactLabel: artifact.shortLabel,
+      providerName: provider.name,
+      classLabel,
+      boardLabel: selectedBoard.label,
+      subject: form.subject,
+      language: form.outputLanguage,
+      timeSaved: selectedRecipe?.timeSaved ?? "Not estimated",
+      snapshot: {
+        recipeId: selectedRecipeId,
+        workflowId: selectedWorkflow.id,
+        artifactId,
+        providerId: provider.id,
+        boardId,
+        grade,
+        audienceMode,
+        classSize,
+        subject: form.subject,
+        level: form.level,
+        topic: form.topic,
+        outputLanguage: form.outputLanguage,
+        timeIndex,
+        difficultyIndex,
+        questionCount,
+        finishId,
+        visualStyleId,
+        assessmentProfileId,
+        addOns: [...addOns],
+      },
+    });
+    setImpactEntries((current) => limitImpactLedger([entry, ...current]));
+    setActiveImpactId(entry.id);
+    return entry.id;
+  };
 
   const copyText = async (text: string) => {
     try {
@@ -554,7 +635,9 @@ export default function PromptStudio() {
     }
   };
 
-  const revealPromptForManualCopy = () => {
+  const revealPromptForManualCopy = (text: string, label = "Build instructions") => {
+    setManualCopyText(text);
+    setManualCopyLabel(label);
     if (technicalPromptRef.current) technicalPromptRef.current.open = true;
     window.setTimeout(() => {
       const textarea = promptTextareaRef.current;
@@ -595,6 +678,7 @@ export default function PromptStudio() {
     const provider = AI_PROVIDERS.find((item) => item.id === providerId) ?? selectedProvider;
     setSelectedProviderId(provider.id);
     setManualProviderId(null);
+    setManualCopyText("");
     setAttemptedAction(true);
     const current = currentPromptResult();
     const currentErrors = current.issues.filter((issue) => issue.severity === "error");
@@ -628,6 +712,8 @@ export default function PromptStudio() {
     try {
       if (copied) {
         setLaunched(true);
+        setManualCopyText("");
+        recordImpactPrepared(provider);
         let providerOpened = false;
         if (launchWindow && !launchWindow.closed) {
           launchWindow.location.replace(provider.url);
@@ -649,7 +735,7 @@ export default function PromptStudio() {
         const message = `Clipboard access was blocked, so ${provider.name} was not opened. The full instructions are selected below—copy them, then use Open ${provider.name}.`;
         setLaunchStatus(message);
         setCopyStatus(message);
-        revealPromptForManualCopy();
+        revealPromptForManualCopy(current.prompt);
       }
     } catch {
       launchWindow?.close();
@@ -659,21 +745,48 @@ export default function PromptStudio() {
       const message = `The ${provider.name} handoff could not finish. The full instructions are selected below—copy them, then use Open ${provider.name}.`;
       setLaunchStatus(message);
       setCopyStatus(message);
-      revealPromptForManualCopy();
+      revealPromptForManualCopy(current.prompt);
     } finally {
       setLaunchingProviderId(null);
     }
   };
 
   const copyPrompt = async () => {
-    const copied = await copyText(currentPromptResult().prompt);
+    const current = currentPromptResult();
+    const currentErrors = current.issues.filter((issue) => issue.severity === "error");
+    if (currentErrors.length) {
+      setAttemptedAction(true);
+      setLaunched(false);
+      const message = "Copy is paused because one required or privacy-sensitive detail needs attention. Use the visible Fix this detail button first.";
+      setLaunchStatus(message);
+      setCopyStatus(message);
+      return;
+    }
+    const copied = await copyText(current.prompt);
     const message = copied
       ? `Build instructions copied. Open any AI below and paste once to create ${artifact.shortLabel}.`
       : "Copy was blocked. The technical instructions are open and selected for manual copying.";
     setManualProviderId(copied ? null : selectedProvider.id);
+    if (copied) {
+      setManualCopyText("");
+      recordImpactPrepared(selectedProvider);
+    }
     setLaunchStatus(message);
     setCopyStatus(message);
-    if (!copied) revealPromptForManualCopy();
+    if (!copied) revealPromptForManualCopy(current.prompt);
+  };
+
+  const copyVisibleInstructions = async () => {
+    if (!manualCopyText) {
+      await copyPrompt();
+      return;
+    }
+    const copied = await copyText(manualCopyText);
+    const message = copied
+      ? `${manualCopyLabel} copied. Return to the same AI chat and paste once.`
+      : `${manualCopyLabel} remains selected. Use your device copy command, then paste it in the AI chat.`;
+    setCopyStatus(message);
+    setLaunchStatus(message);
   };
 
   const copyFollowUp = async (id: string) => {
@@ -685,15 +798,101 @@ export default function PromptStudio() {
       transform: "transform",
       share: "publish",
     };
-    const refinement = result.refinements.find((item) => item.id === map[id]);
-    if (!refinement) return;
+    const current = currentPromptResult();
+    const refinement = current.refinements.find((item) => item.id === map[id]);
+    if (!refinement) return false;
     const copied = await copyText(refinement.prompt);
     if (copied) {
+      setManualCopyText("");
       setFollowUpTrail((current) => [...current, refinement.label]);
       setCopyStatus(`${refinement.label} copied. Paste it in the same AI chat so the artifact, class and topic stay intact.`);
     } else {
-      setCopyStatus("Clipboard access was blocked. Open the technical instructions to copy manually.");
+      const message = `${refinement.label} could not be copied automatically. The exact follow-up is open and selected below for manual copy.`;
+      setCopyStatus(message);
+      setLaunchStatus(message);
+      revealPromptForManualCopy(refinement.prompt, `${refinement.label} follow-up`);
     }
+    return copied;
+  };
+
+  const markImpactOutcome = async (outcome: Exclude<ImpactOutcome, "prepared">) => {
+    if (!activeImpactId) return;
+    setImpactEntries((current) => setImpactOutcome(current, activeImpactId, outcome));
+    if (outcome === "usable") {
+      const message = "Usable artifact confirmed. This device-local evidence is now available in My impact, and the setup can be reused.";
+      setCopyStatus(message);
+      setLaunchStatus(message);
+      return;
+    }
+    const copied = await copyFollowUp("repair");
+    const message = copied
+      ? "Outcome recorded. The repair instruction is copied—paste it in the same AI chat."
+      : "Outcome recorded. The exact repair instruction is open and selected below for manual copy.";
+    setLaunchStatus(message);
+  };
+
+  const copyImpactSummary = async () => {
+    const copied = await copyText(formatPilotSummary(impactSummary));
+    const message = copied
+      ? "Anonymous device-local pilot snapshot copied. It is clearly labelled as local evidence, not global traction."
+      : "The pilot snapshot could not be copied automatically.";
+    setCopyStatus(message);
+    setLaunchStatus(message);
+  };
+
+  const repeatImpactSetup = (entry: ImpactEntry) => {
+    const snapshot = entry.snapshot;
+    const workflow = WORKFLOWS.find((item) => item.id === snapshot.workflowId);
+    if (!workflow) return;
+    const recipe = STUDIO_RECIPES.find((item) => item.id === snapshot.recipeId);
+    const nextArtifact = getArtifactProfile(snapshot.artifactId);
+    const nextBoard = BOARD_OPTIONS.find((item) => item.id === snapshot.boardId) ?? BOARD_OPTIONS[0];
+    const nextProvider = AI_PROVIDERS.find((item) => item.id === snapshot.providerId) ?? AI_PROVIDERS[0];
+    const safeTimeIndex = Math.min(TIME_OPTIONS.length - 1, Math.max(0, snapshot.timeIndex));
+    const safeDifficultyIndex = Math.min(DIFFICULTY_OPTIONS.length - 1, Math.max(0, snapshot.difficultyIndex));
+    const nextFinish = FINISH_LEVELS.find((item) => item.id === snapshot.finishId) ?? FINISH_LEVELS[1];
+
+    setSelectedRecipeId(recipe?.id ?? "");
+    setSelectedWorkflow(workflow);
+    if (recipe) setRecipeCategory(recipe.category);
+    setArtifactId(nextArtifact.id);
+    setArtifactFamily(nextArtifact.family);
+    setSelectedProviderId(nextProvider.id);
+    setBoardId(nextBoard.id);
+    setGrade(Math.min(12, Math.max(1, snapshot.grade)));
+    setAudienceMode(snapshot.audienceMode);
+    setClassSize(Math.min(60, Math.max(10, snapshot.classSize)));
+    setTimeIndex(safeTimeIndex);
+    setDifficultyIndex(safeDifficultyIndex);
+    setQuestionCount(Math.min(50, Math.max(5, snapshot.questionCount)));
+    setFinishId(nextFinish.id);
+    setVisualStyleId(VISUAL_STYLES.some((item) => item.id === snapshot.visualStyleId) ? snapshot.visualStyleId : "academic-editorial");
+    setAssessmentProfileId(ASSESSMENT_PROFILES.some((item) => item.id === snapshot.assessmentProfileId) ? snapshot.assessmentProfileId : "balanced-academic");
+    setAddOns(snapshot.addOns.filter((id) => ADD_ONS.some((item) => item.id === id)));
+    setForm((current) => ({
+      ...current,
+      subject: SUBJECTS.includes(snapshot.subject) ? snapshot.subject : current.subject,
+      level: snapshot.audienceMode === "school" ? gradeToLevel(snapshot.grade) : snapshot.level,
+      topic: snapshot.topic,
+      curriculum: nextBoard.value,
+      outputLanguage: LANGUAGE_OPTIONS.includes(snapshot.outputLanguage) ? snapshot.outputLanguage : current.outputLanguage,
+      duration: `${TIME_OPTIONS[safeTimeIndex]} minutes`,
+      cognitiveDemand: DIFFICULTY_OPTIONS[safeDifficultyIndex].value,
+      objective: recipe?.objective ?? workflow.defaultGoal,
+      details: recipe?.details ?? "",
+      taskMaterial: "",
+      sourceMaterial: "",
+      powerMode: DEPTH_OPTIONS[nextFinish.depthIndex].powerMode,
+      outputLength: DEPTH_OPTIONS[nextFinish.depthIndex].length,
+    }));
+    setLaunched(false);
+    setManualProviderId(null);
+    setManualCopyText("");
+    setFollowUpTrail([]);
+    setImpactOpen(false);
+    setMaxStep(3);
+    setActiveStep(2);
+    setCopyStatus(`${entry.mission} setup restored. Review the real files, then continue to Launch AI.`);
   };
 
   const surpriseMe = () => {
@@ -728,6 +927,7 @@ export default function PromptStudio() {
     setLaunched(false);
     setLaunchStatus("");
     setManualProviderId(null);
+    setManualCopyText("");
     setFollowUpTrail([]);
     setCopyStatus(`Surprise: ${recipe.shortTitle} · ${nextArtifact.shortLabel} · Class ${nextGrade} ${subject}.`);
     advanceTo(1);
@@ -758,6 +958,9 @@ export default function PromptStudio() {
     setLaunchStatus("");
     setLaunchingProviderId(null);
     setManualProviderId(null);
+    setManualCopyText("");
+    setActiveImpactId(null);
+    setImpactOpen(false);
     setFollowUpTrail([]);
     setAttemptedAction(false);
     setCopyStatus("Fresh studio ready.");
@@ -786,6 +989,25 @@ export default function PromptStudio() {
         ? "Next: create the artifact"
         : artifact.actionLabel;
 
+  const openFlagshipDemo = () => {
+    applyRecipe(DEFAULT_RECIPE);
+    setForm((current) => ({
+      ...current,
+      subject: "Mathematics",
+      topic: "Quadratic equations",
+      level: "Secondary / high school",
+      outputLanguage: "Hindi + English",
+    }));
+    setGrade(10);
+    setBoardId("cbse");
+    setAssessmentProfileId("balanced-academic");
+    setQuestionCount(20);
+    setMaxStep(2);
+    setActiveStep(2);
+    setCopyStatus("Flagship demo loaded: Class 10 bilingual quadratic-equations assessment bundle.");
+    window.setTimeout(() => document.getElementById("maker-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+
   return (
     <main className="maker-shell">
       <a className="skip-link" href="#maker-workspace">Skip to artifact maker</a>
@@ -795,26 +1017,65 @@ export default function PromptStudio() {
           <span aria-hidden="true">TP</span>
           <div><strong>Teacher Prompt Studio</strong><small>Artifact maker for Indian teachers</small></div>
         </a>
-        <div className="nav-proof"><i /> Nothing is sent by this site</div>
+        <div className="nav-proof"><i /> Your prompt is not uploaded by this site</div>
         <div className="nav-buttons">
           <button type="button" onClick={surpriseMe}>✦ Surprise me</button>
+          <button type="button" className="impact-toggle" aria-expanded={impactOpen} aria-controls="impact-panel" onClick={() => setImpactOpen((current) => !current)}>◎ My impact <b>{impactSummary.confirmedUsable}</b></button>
           <button type="button" onClick={resetBuilder}>Start fresh</button>
         </div>
       </header>
 
+      {impactOpen && (
+        <ImpactPanel
+          entries={impactEntries}
+          summary={impactSummary}
+          onClose={() => setImpactOpen(false)}
+          onCopySummary={() => void copyImpactSummary()}
+          onRepeat={repeatImpactSetup}
+        />
+      )}
+
       <section className="maker-intro" id="top">
         <div>
-          <span className="intro-kicker">No prompt writing · no blank page · real-file instructions</span>
-          <h1>Choose it. Shape it. <em>Create the actual artifact.</em></h1>
+          <span className="intro-kicker">India-first assessment production · prompt stays backstage</span>
+          <h1>Turn a chapter into a dependable assessment bundle. <em>Then reuse what works.</em></h1>
           <p>
-            The prompt stays backstage. You choose what the teacher needs; the studio prepares
-            exact instructions for a PDF, DOCX, image, website, flowchart, workbook or simulation.
+            Choose board, class and chapter. The studio prepares a production brief for separate
+            student files, an editable master and teacher key, then hands it to the AI you already use.
+            DPPs, notes, visuals, websites and simulations remain one tap away.
           </p>
+          <div className="intro-actions">
+            <button type="button" onClick={openFlagshipDemo}>Try the Class 10 flagship →</button>
+            <a href="#maker-workspace">Explore every teacher job</a>
+          </div>
         </div>
         <div className="intro-promise">
-          <strong>3 taps for returning teachers</strong>
-          <span>Mission → chapter → create</span>
-          <i>Saved only on this device</i>
+          <strong>Four guided steps</strong>
+          <span>Choose → fit → files → launch</span>
+          <i>Your classroom profile is remembered locally</i>
+        </div>
+      </section>
+
+      <section className="flagship-proof" aria-labelledby="flagship-proof-title" data-testid="flagship-sample">
+        <div className="flagship-proof-copy">
+          <span><i aria-hidden="true">✓</i> Render-verified flagship sample</span>
+          <h2 id="flagship-proof-title">See the academic standard before you build.</h2>
+          <p>
+            One bilingual Class 10 Quadratic Equations assessment, delivered as physically separate
+            student and teacher files. Every item, answer, mark and Devanagari page was checked.
+          </p>
+          <small>Curated demonstration · 20 complete items · 40 marks · no learner data · not live-user traction</small>
+        </div>
+        <div className="flagship-proof-files" aria-label="Verified flagship sample files">
+          <a href="./samples/class-10-quadratics-student-bilingual.pdf" target="_blank" rel="noopener noreferrer">
+            <i>PDF</i><span><strong>Student paper</strong><small>English + Hindi · print-ready</small></span><b>View ↗</b>
+          </a>
+          <a href="./samples/class-10-quadratics-student-editable.docx" download>
+            <i>DOCX</i><span><strong>Editable master</strong><small>Native styles · teacher editable</small></span><b>Download ↓</b>
+          </a>
+          <a href="./samples/class-10-quadratics-teacher-pack-bilingual.pdf" target="_blank" rel="noopener noreferrer">
+            <i>KEY</i><span><strong>Teacher pack</strong><small>Blueprint · worked key · marking</small></span><b>View ↗</b>
+          </a>
         </div>
       </section>
 
@@ -881,7 +1142,7 @@ export default function PromptStudio() {
                         aria-pressed={selected}
                         onClick={() => applyRecipe(recipe)}
                       >
-                        <span className="outcome-top"><i>{recipe.glyph}</i><small>Saves {recipe.timeSaved}</small></span>
+                        <span className="outcome-top"><i>{recipe.glyph}</i><small>{recipe.timeSaved === "Instant reuse" ? "Fast repeat setup" : `Estimated save · ${recipe.timeSaved}`}</small></span>
                         <strong>{recipe.shortTitle}</strong>
                         <p>{recipe.summary}</p>
                         <span className="file-promise"><b>{recipeArtifact.glyph}</b>{recipeArtifact.shortLabel}</span>
@@ -969,7 +1230,7 @@ export default function PromptStudio() {
                       </button>
                     ))}
                   </div>
-                  <label className="compact-select"><span>Another subject</span><select value={form.subject} onChange={updateField("subject")}>{SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
+                  <label className="compact-select"><span>Another subject</span><select value={form.subject} onChange={(event) => chooseSubject(event.target.value)}>{SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
                   {form.subject === "Custom subject" && (
                     <label className="wide-input"><span>Your subject</span><input id="field-customSubject" value={form.customSubject} onChange={updateField("customSubject")} placeholder="Type the teaching area…" /></label>
                   )}
@@ -1129,6 +1390,7 @@ export default function PromptStudio() {
                     <label><span>Success evidence</span><textarea id="field-successEvidence" rows={3} value={form.successEvidence} onChange={updateField("successEvidence")} /></label>
                     <label className="wide"><span>Material to transform</span><textarea id="field-taskMaterial" rows={5} value={form.taskMaterial} onChange={updateField("taskMaterial")} placeholder="Paste an anonymised paper, draft, learner response or resource…" /></label>
                     <label className="wide"><span>Authoritative source or blueprint</span><textarea id="field-sourceMaterial" rows={5} value={form.sourceMaterial} onChange={updateField("sourceMaterial")} placeholder="Paste the current syllabus extract, verified blueprint or rubric…" /></label>
+                    <p className="data-boundary-note">Before any AI handoff, remove learner names, contact details, admission numbers, health information and identifiable student work. The selected external AI provider applies its own privacy terms.</p>
                     <label className="wide"><span>Must avoid or preserve</span><textarea id="field-mustAvoid" rows={3} value={form.mustAvoid} onChange={updateField("mustAvoid")} /></label>
                   </div>
                 </details>
@@ -1159,6 +1421,11 @@ export default function PromptStudio() {
                     </div>
                   )}
 
+                  <div className="external-ai-disclosure">
+                    <i aria-hidden="true">↗</i>
+                    <span><strong>External AI handoff</strong><small>This site prepares and copies the brief. When you paste it into ChatGPT, Claude, Gemini or another AI, that provider&apos;s privacy and file-generation limits apply. Never include identifiable learner information.</small></span>
+                  </div>
+
                   <button
                     type="button"
                     className={`create-artifact-button ${errors.length ? "blocked" : ""}`}
@@ -1169,7 +1436,7 @@ export default function PromptStudio() {
                   </button>
 
                   <div className="provider-actions">
-                    <div className="choice-heading"><span>Or open another AI directly</span><small>Recommended choices appear first; every option stays visible</small></div>
+                    <div className="choice-heading"><span>Or open another AI directly</span><small>Suggested format fits appear first; capability can vary by plan and model</small></div>
                     <button type="button" className="copy-only-button" onClick={copyPrompt} disabled={Boolean(launchingProviderId)}>Copy instructions only</button>
                   </div>
                   <div className="provider-cards" aria-label="Available AI providers">
@@ -1186,7 +1453,7 @@ export default function PromptStudio() {
                         >
                           <i>{provider.glyph}</i>
                           <span><strong>{provider.name}</strong><small>{provider.note}</small></span>
-                          <em>{index === 0 ? "Best match" : recommended ? "Recommended" : "Available"}</em>
+                          <em>{index === 0 ? "Suggested" : recommended ? "Format fit" : "Available"}</em>
                           <b>{launchingProviderId === provider.id ? "Preparing…" : "Copy & open ↗"}</b>
                         </button>
                       );
@@ -1198,6 +1465,7 @@ export default function PromptStudio() {
                     <div className="manual-launch-recovery" role="group" aria-label={`${manualProvider.name} manual launch recovery`}>
                       <span><strong>Safe fallback ready</strong><small>The full instructions are visible and selected. Copy them if needed before opening the AI.</small></span>
                       <a href={manualProvider.url} target="_blank" rel="noopener noreferrer" onClick={() => {
+                        if (!launched) recordImpactPrepared(manualProvider);
                         setLaunched(true);
                         setManualProviderId(null);
                         setLaunchStatus(`${manualProvider.name} opened. Paste the copied instructions once to create ${artifact.shortLabel}.`);
@@ -1207,7 +1475,7 @@ export default function PromptStudio() {
                 </section>
 
                 <div className="launch-receipt">
-                  <span>What the AI will create</span>
+                  <span>What the AI is instructed to create</span>
                   <h3>{classLabel} {form.topic} · {artifact.shortLabel}</h3>
                   <p>{artifact.promise}</p>
                   <div className="receipt-files">
@@ -1225,6 +1493,22 @@ export default function PromptStudio() {
                   <div className="launch-issues" aria-live="polite">
                     {warnings.slice(0, 2).map((issue) => <button type="button" className="warning" onClick={() => focusIssue(issue.field)} key={issue.message}><strong>Helpful check</strong>{issue.message}</button>)}
                   </div>
+                )}
+
+                {launched && activeImpact && (
+                  <section className="outcome-proof" data-testid="outcome-proof" aria-labelledby="outcome-proof-title">
+                    <div>
+                      <span>Close the loop · one tap</span>
+                      <h3 id="outcome-proof-title">Did the AI return a usable artifact?</h3>
+                      <p>Your answer stays on this device. It improves your repeat workflow and produces honest pilot evidence without storing learner material.</p>
+                    </div>
+                    <div role="group" aria-label="Artifact outcome">
+                      <button type="button" className={activeImpact.outcome === "usable" ? "selected" : ""} aria-pressed={activeImpact.outcome === "usable"} onClick={() => void markImpactOutcome("usable")}><i>✓</i><span><strong>Yes—usable file</strong><small>Save this setup for reuse</small></span></button>
+                      <button type="button" className={activeImpact.outcome === "repair" ? "selected" : ""} aria-pressed={activeImpact.outcome === "repair"} onClick={() => void markImpactOutcome("repair")}><i>↻</i><span><strong>Needs repair</strong><small>Copy the exact repair move</small></span></button>
+                      <button type="button" className={activeImpact.outcome === "text-only" ? "selected" : ""} aria-pressed={activeImpact.outcome === "text-only"} onClick={() => void markImpactOutcome("text-only")}><i>!</i><span><strong>Only text returned</strong><small>Force real-file delivery</small></span></button>
+                    </div>
+                    <button type="button" className="view-impact-button" onClick={() => setImpactOpen(true)}>View My impact &amp; repeat builds →</button>
+                  </section>
                 )}
 
                 <div className={`followup-map ${launched ? "active" : ""}`}>
@@ -1253,11 +1537,11 @@ export default function PromptStudio() {
                 </div>
 
                 <details className="technical-prompt" ref={technicalPromptRef}>
-                  <summary><span><strong>Advanced · inspect build instructions</strong><small>The teacher never needs to edit this</small></span><i>＋</i></summary>
+                  <summary><span><strong>Advanced · inspect build instructions</strong><small>{manualCopyText ? `${manualCopyLabel} selected for recovery` : "The teacher never needs to edit this"}</small></span><i>＋</i></summary>
                   <div>
-                    <p>{result.prompt.length.toLocaleString()} characters · hidden creator marker included · file-delivery contract active</p>
-                    <textarea ref={promptTextareaRef} value={result.prompt} readOnly aria-label="Generated artifact build instructions" spellCheck={false} />
-                    <button type="button" onClick={copyPrompt}>Copy build instructions</button>
+                    <p>{(manualCopyText || result.prompt).length.toLocaleString()} characters · {manualCopyText ? manualCopyLabel : "hidden creator marker included · file-delivery contract active"}</p>
+                    <textarea ref={promptTextareaRef} value={manualCopyText || result.prompt} readOnly aria-label={manualCopyText ? manualCopyLabel : "Generated artifact build instructions"} spellCheck={false} />
+                    <button type="button" onClick={() => void copyVisibleInstructions()}>Copy {manualCopyText ? manualCopyLabel.toLowerCase() : "build instructions"}</button>
                   </div>
                 </details>
               </div>
@@ -1277,9 +1561,9 @@ export default function PromptStudio() {
               assessmentMode={Boolean(selectedWorkflow.flags?.includes("assessment"))}
             />
             <div className="confidence-card">
-              <div><span>Artifact confidence</span><strong>{result.score}%</strong></div>
+              <div><span>Build-brief readiness</span><strong>{result.score}%</strong></div>
               <i><b style={{ width: `${result.score}%` }} /></i>
-              <p>{result.status}. {errors.length ? "One essential detail needs attention." : warnings.length ? "Ready with a helpful verification note." : "Ready for file creation."}</p>
+              <p>{result.status}. {errors.length ? "One essential detail needs attention." : warnings.length ? "Ready with a helpful verification note." : "The instructions are ready for an external AI handoff."}</p>
             </div>
             <div className="blueprint-summary">
               <span>Built into every mission</span>
@@ -1308,7 +1592,7 @@ export default function PromptStudio() {
 
       <footer className="maker-footer">
         <span><strong>Teacher Prompt Studio</strong><small>Real artifacts. Deep prompts. Comfortable flow.</small></span>
-        <p>No login · No tracking · No learner data uploaded</p>
+        <p>No login · no in-app analytics · external AI opens separately</p>
         <a href="#top">Back to top ↑</a>
       </footer>
     </main>

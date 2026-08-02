@@ -62,29 +62,31 @@ test("server-renders the teacher prompt studio", async () => {
 
   const html = await response.text();
   assert.match(html, /Teacher Prompt Studio/);
-  assert.match(html, /dependable assessment bundle/);
-  assert.match(html, /prompt stays backstage/);
-  assert.match(html, /Pick a ready teaching mission/);
-  assert.match(html, /Your prompt is not uploaded by this site/);
-  assert.match(html, /Live artifact blueprint/);
-  assert.match(html, /PDF \+ DOCX bundle/);
+  assert.match(html, /What do you want to make today\?/);
+  assert.match(html, /Three creation steps/);
+  assert.match(html, /Ready-to-use files, not generic chat/);
+  assert.match(html, /Your work stays in this browser/);
   assert.match(html, /Question paper/);
-  assert.match(html, /Render-verified flagship sample/);
+  assert.match(html, /DPP/);
+  assert.match(html, /Theory notes/);
+  assert.match(html, /Lesson plan/);
+  assert.match(html, /Slide deck/);
+  assert.match(html, /Simulation/);
+  assert.match(html, /See more teaching materials/);
+  assert.match(html, /finished PDF, DOCX, slides, image or website files/);
   assert.match(html, /class-10-quadratics-student-bilingual\.pdf/);
-  assert.match(html, /class-10-quadratics-student-editable\.docx/);
-  assert.match(html, /class-10-quadratics-teacher-pack-bilingual\.pdf/);
+  assert.doesNotMatch(html, /private proof loop|pilot snapshot|not live-user traction/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("keeps the prompt library broad and the old logic defects removed", async () => {
-  const [data, engine, page, layout, presets, artifacts, stage, preflight, styles, assessmentSpec] = await Promise.all([
+test("keeps the prompt library broad while the primary flow stays simple", async () => {
+  const [data, engine, page, layout, presets, artifacts, preflight, styles, assessmentSpec] = await Promise.all([
     readFile(new URL("../app/prompt-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/prompt-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/PromptStudio.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/studio-presets.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/artifact-data.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/ArtifactStage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/artifact-preflight.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/assessment-spec.ts", import.meta.url), "utf8"),
@@ -156,39 +158,47 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(engine, /PROVENANCE METADATA/);
   assert.match(engine, /studio-provenance: \$\{safeCreatorMarker\}/);
   assert.match(engine, /FILE-ONLY FINAL RETURN/);
-  assert.match(page, /useMemo\(\s*\(\) => buildTeacherPrompt/);
+  assert.match(page, /const result = useMemo\(\(\) => buildTeacherPrompt\(builderInput\)/);
+  assert.doesNotMatch(page, /useDeferredValue/);
   assert.match(page, /aria-live="polite"/);
   assert.match(page, /STUDIO_RECIPES/);
-  assert.match(page, /surpriseMe/);
+  assert.match(page, /QUICK_RECIPE_IDS/);
+  assert.match(page, /"question-paper"/);
+  assert.match(page, /"daily-dpp"/);
+  assert.match(page, /"theory-notes"/);
+  assert.match(page, /"lesson-plan"/);
+  assert.match(page, /"slide-deck"/);
+  assert.match(page, /"interactive-simulation"/);
+  assert.doesNotMatch(page, /surpriseMe|ImpactPanel|ArtifactStage/);
   assert.match(page, /current\.refinements/);
   assert.match(page, /activeStep/);
   assert.match(page, /aria-current=/);
-  assert.match(page, /ArtifactStage/);
   assert.match(page, /FOLLOW_UP_PATHS/);
-  assert.match(page, /artifact\.actionLabel/);
   assert.match(page, /AI_PROVIDERS/);
   assert.match(page, /data-testid="launch-ai-panel"/);
-  assert.match(page, /launchProviders\.map/);
+  assert.match(page, /AI_PROVIDERS\.slice/);
   assert.match(page, /Copy instructions & open/);
-  assert.match(page, /prepareProvider\(provider\.id\)/);
+  assert.match(page, /prepareProvider\(selectedProvider\.id\)/);
   assert.match(page, /revealPromptForManualCopy/);
   assert.match(page, /technicalPromptRef\.current\.open = true/);
   assert.match(page, /window\.open\("about:blank", "_blank"\)/);
   assert.match(page, /launchWindow\.location\.replace\(provider\.url\)/);
   assert.match(page, /launchWindow\?\.close\(\)/);
   assert.match(page, /After copying, open \{manualProvider\.name\}/);
-  assert.match(page, /if \(!launched\) recordImpactPrepared\(manualProvider\)/);
-  assert.doesNotMatch(page, /href=\{provider\.url\}[\s\S]{0,180}prepareProvider/);
+  assert.doesNotMatch(page, /recordImpactPrepared|markImpactOutcome/);
+  assert.doesNotMatch(page, /onClick=\{\(\) => void prepareProvider\(provider\.id\)\}/);
   const reserveTab = page.indexOf('window.open("about:blank", "_blank")');
   const copyInstructions = page.indexOf("await copyText(current.prompt)", reserveTab);
   const navigateProvider = page.indexOf("launchWindow.location.replace(provider.url)", copyInstructions);
   assert.ok(reserveTab >= 0 && reserveTab < copyInstructions && copyInstructions < navigateProvider,
     "provider navigation must wait until the copy attempt finishes");
-  assert.doesNotMatch(page, /focusIssue\(currentErrors\[0\]\.field\)/);
-  assert.doesNotMatch(page, /<details className="all-providers">/);
   assert.ok(
-    page.indexOf('data-testid="launch-ai-panel"') < page.indexOf('className="launch-receipt"'),
-    "Launch AI must appear before the delivery receipt",
+    page.indexOf("launchWindow.location.replace(provider.url)") < page.indexOf("setLaunched(true)", navigateProvider),
+    "a handoff is launched only after the reserved AI tab is navigated",
+  );
+  assert.ok(
+    page.indexOf('className="file-list"') < page.indexOf('data-testid="launch-ai-panel"'),
+    "teachers review the promised files before the single AI launch action",
   );
   assert.match(page, /ASSESSMENT_PROFILES/);
   assert.match(page, /STRUCTURED_ITEM_WORKFLOW_IDS/);
@@ -199,12 +209,12 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(assessmentSpec, /profile\.rows\[rowIndex\]\.weight <= 0 \|\| counts\[rowIndex\] > 0/);
   assert.match(assessmentSpec, /counts\[rowIndex\] = 1/);
   assert.match(page, /EXACTLY \$\{assessmentSpec\.totalItems\} items/);
-  assert.match(page, /Exact item and mark totals are calculated automatically/);
   assert.doesNotMatch(page, /approximately \$\{questionCount\}/);
-  assert.match(page, /expertDetailsRef\.current\.open = true/);
+  assert.match(page, /advancedDetailsRef\.current\.open = true/);
   assert.match(page, /textarea\.value = text/);
-  assert.match(page, /aria-label="Thinking demand"/);
-  assert.match(page, /aria-label="Question volume"/);
+  assert.match(page, /aria-label="Difficulty"/);
+  assert.match(page, /aria-label="Question count"/);
+  assert.match(page, /aria-valuetext/);
   assert.ok(
     (presets.match(/workflowId: "/g) ?? []).length >= 28,
     "expected at least 28 tap-first outcome recipes",
@@ -255,11 +265,6 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(artifacts, /id: "application-rich"/);
   assert.match(artifacts, /id: "rapid-diagnostic"/);
   assert.match(artifacts, /Return the fully runnable self-contained HTML simulation file/);
-  assert.match(stage, /Interactive flowchart blueprint preview/);
-  assert.match(stage, /Interactive simulation blueprint preview/);
-  assert.match(stage, /Teacher assessment pack/);
-  assert.match(stage, /Placeholders 0/);
-  assert.match(stage, /useState/);
   for (const gate of [
     "G01_MANIFEST",
     "G03_PLACEHOLDERS",
@@ -282,14 +287,14 @@ test("keeps the prompt library broad and the old logic defects removed", async (
   assert.match(preflight, /U\+FFFD/);
   assert.match(preflight, /tofu boxes/);
   assert.match(preflight, /placeholder scan count must equal zero/);
-  assert.match(styles, /\.style-academic-editorial/);
-  assert.match(styles, /\.style-technical-institute/);
-  assert.match(styles, /\.assessment-profile-buttons/);
-  assert.match(styles, /\.maker-actions \{[\s\S]*position: fixed/);
-  assert.match(styles, /\.blueprint-panel \{[\s\S]*grid-row: 2/);
-  assert.match(styles, /\.provider-cards > button/);
-  assert.match(layout, /Dependable assessment production/);
-  assert.match(layout, /og-beast\.png/);
+  assert.match(styles, /\.quick-recipes/);
+  assert.match(styles, /\.review-grid/);
+  assert.match(styles, /\.launch-card/);
+  assert.match(styles, /\.provider-picker/);
+  assert.match(styles, /@media \(max-width: 680px\)/);
+  assert.doesNotMatch(styles, /\.maker-actions \{[\s\S]*position: fixed/);
+  assert.match(layout, /Create classroom-ready files with AI/);
+  assert.match(layout, /og-studio-v2\.png/);
   assert.doesNotMatch(page, /download.*teacher-prompt\.txt/s);
 });
 
@@ -470,8 +475,18 @@ test("blocks identifiable learner data as an error before any external handoff",
   const privacyIssue = issues.find((issue) => /personal identifier|email|phone/i.test(issue.message));
   assert.ok(privacyIssue, "identifiable learner data must produce a privacy issue");
   assert.equal(privacyIssue.severity, "error");
-  assert.equal(privacyIssue.field, "taskMaterial");
+  assert.equal(privacyIssue.field, "learnerContext");
   assert.match(privacyIssue.message, /Remove it before copying anything to an external AI provider/);
+
+  const sourceIssues = validatePromptInput({
+    ...input,
+    learnerContext: "Anonymous Class 10 learners",
+    sourceMaterial: "Contact the author at student@example.com",
+  });
+  assert.equal(
+    sourceIssues.find((issue) => /personal identifier|email|phone/i.test(issue.message))?.field,
+    "sourceMaterial",
+  );
 });
 
 test("keeps validation ahead of copying and preserves the exact refinement on fallback", async () => {
@@ -502,11 +517,11 @@ test("keeps validation ahead of copying and preserves the exact refinement on fa
     "await copyText(current.prompt)",
   ], "copy-only validation");
 
-  const followUp = sourceSection(page, "const copyFollowUp = async", "const markImpactOutcome = async");
+  const followUp = sourceSection(page, "const copyFollowUp = async", "const continueToReview =");
   assertSourceOrder(followUp, [
     "const current = currentPromptResult()",
     "current.refinements.find",
-    "if (!refinement) return false",
+    "if (!refinement) return;",
     "await copyText(refinement.prompt)",
     "revealPromptForManualCopy(refinement.prompt",
   ], "exact refinement fallback");
@@ -568,10 +583,9 @@ test("keeps validation ahead of copying and preserves the exact refinement on fa
   }
 });
 
-test("resets topic selection with the subject and keeps investor-demo claims honest", async () => {
-  const [page, impactPanel, { SUBJECT_LAUNCHERS, TOPIC_BANK }] = await Promise.all([
+test("keeps profile topics coherent and teacher-facing claims honest", async () => {
+  const [page, { SUBJECT_LAUNCHERS, TOPIC_BANK }] = await Promise.all([
     readFile(new URL("../app/PromptStudio.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/ImpactPanel.tsx", import.meta.url), "utf8"),
     import("../app/studio-presets.ts"),
   ]);
   const chooseSubject = sourceSection(page, "const chooseSubject =", "const chooseLanguage =");
@@ -584,19 +598,18 @@ test("resets topic selection with the subject and keeps investor-demo claims hon
     assert.ok(TOPIC_BANK[subject.label]?.[0], `${subject.label} needs a deterministic reset topic`);
   }
   assert.notEqual(TOPIC_BANK.Mathematics[0], TOPIC_BANK.Biology[0]);
-  assert.match(page, /aria-checked=\{form\.subject === subject\.label\}/);
   assert.match(page, /<select value=\{form\.subject\} onChange=\{\(event\) => chooseSubject\(event\.target\.value\)\}>/);
+  assert.match(page, /topic\?: string/);
+  assert.match(page, /TOPIC_BANK\[subjectForTopic\]\?\.\[0\]/);
+  assert.match(page, /topic: validSavedTopic/);
 
-  assert.match(page, /Estimated save · \$\{recipe\.timeSaved\}/);
-  assert.match(page, /<em>\{index === 0 \? "Suggested" : recommended \? "Format fit" : "Available"\}<\/em>/);
-  assert.match(page, /External AI handoff/);
-  assert.match(page, /provider&apos;s privacy and file-generation limits apply/);
-  assert.match(page, /file-generation support can vary by provider, plan and model/);
-  assert.match(page, /Your answer stays on this device/);
-  assert.match(page, /Build-brief readiness/);
+  assert.doesNotMatch(page, /Estimated save|not live-user traction|Build-brief readiness|private proof loop/i);
+  assert.match(page, /The AI you open has its own privacy terms/);
+  assert.match(page, /File creation can vary by AI provider, plan and model/);
+  assert.match(page, /The AI is instructed to return files, not a normal chat answer/);
   assert.doesNotMatch(page, /Best match for this file|Guaranteed file|guaranteed time saved/i);
-  assert.match(impactPanel, /Source material and learner responses are never stored/);
-  assert.match(impactPanel, /Private by default: this evidence stays in your browser/);
+  assert.match(page, /creatorSignature: CREATOR_SIGNATURE/);
+  assert.match(page, /creatorMarker: CREATOR_MARKER/);
 });
 
 test("runs every release quality gate before the Pages build", async () => {

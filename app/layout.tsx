@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 const metadataBase: Metadata = {
-  title: "Teacher Prompt Studio | Dependable assessment production",
+  title: "Teacher Prompt Studio | Create classroom-ready files with AI",
   description:
-    "Turn an Indian board, class and chapter into a production brief for separate student files, an editable master and teacher key—then reuse what works.",
+    "Choose a teaching material, add your class details and open ChatGPT, Claude or Gemini with expert instructions for classroom-ready files.",
   applicationName: "Teacher Prompt Studio",
   keywords: [
     "teacher prompt builder",
@@ -54,7 +54,7 @@ export async function generateMetadata(): Promise<Metadata> {
         ? "http"
         : "https";
   const origin = `${protocol}://${host}`;
-  const imageUrl = `${origin}/og-beast.png`;
+  const imageUrl = `${origin}/og-studio-v2.png`;
 
   return {
     ...metadataBase,
@@ -65,13 +65,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Teacher Prompt Studio",
       title: "Teacher Prompt Studio",
       description:
-        "Turn an Indian board, class and chapter into an exact assessment-production brief, hand it to your AI and reuse the setups that return usable files.",
+        "Choose what you need, add five class details and open your AI with expert instructions for finished classroom files.",
       images: [
         {
           url: imageUrl,
           width: 1200,
           height: 630,
-          alt: "Teacher Prompt Studio — artifact-first AI creation for teachers.",
+          alt: "Teacher Prompt Studio — choose, add class details and create real classroom files.",
         },
       ],
     },
@@ -79,7 +79,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Teacher Prompt Studio",
       description:
-        "A four-step assessment-production system for Indian teachers, with real-file contracts and a private proof loop.",
+        "A simple three-step maker for Indian teachers: choose, add class details and create finished files with AI.",
       images: [imageUrl],
     },
   };

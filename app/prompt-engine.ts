@@ -222,14 +222,17 @@ export function validatePromptInput(input: BuilderInput): PromptIssue[] {
     });
   }
 
-  if (
-    looksIdentifiable(
-      `${input.learnerContext}\n${input.taskMaterial}\n${input.sourceMaterial}`,
-    )
-  ) {
+  const identifiableField = looksIdentifiable(input.learnerContext)
+    ? "learnerContext"
+    : looksIdentifiable(input.taskMaterial)
+      ? "taskMaterial"
+      : looksIdentifiable(input.sourceMaterial)
+        ? "sourceMaterial"
+        : undefined;
+  if (identifiableField) {
     issues.push({
       severity: "error",
-      field: "taskMaterial",
+      field: identifiableField,
       message: "Possible email, phone number or personal identifier detected. Remove it before copying anything to an external AI provider.",
     });
   }

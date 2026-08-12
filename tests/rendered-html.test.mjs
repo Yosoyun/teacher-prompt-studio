@@ -154,9 +154,8 @@ test("keeps the prompt library broad while the primary flow stays simple", async
   assert.match(engine, /effectiveArtifactFiles/);
   assert.match(engine, /effectivePortableFallback/);
   assert.match(engine, /allowsControlledPlaceholders/);
-  assert.match(engine, /compilePreflightGateLines\(input\.artifact, input\.outputLanguage, isAssessment, artifactFiles, controlledPlaceholders\)/);
-  assert.match(engine, /LEDGERED FIELDS 6\/6/);
-  assert.match(engine, /UNLISTED PLACEHOLDERS 0/);
+  assert.match(engine, /compilePreflightGateLines\(input\.artifact, input\.outputLanguage, formalAssessment, artifactFiles, controlledPlaceholders\)/);
+  assert.match(engine, /Report measured counts for ledgered fields, unlisted placeholders and dummy placeholders separately/);
   assert.match(engine, /Never merge learner and teacher content into one fallback file/);
   assert.doesNotMatch(engine, /Portable fallback: \$\{input\.artifact\.fallback\}/);
   assert.match(engine, /artifactManifest: artifactFiles/);
@@ -294,7 +293,7 @@ test("keeps the prompt library broad while the primary flow stays simple", async
   ]) {
     assert.match(preflight, new RegExp(`id: "${gate}"`));
   }
-  assert.match(preflight, /NOT_RUN is a failure/);
+  assert.match(preflight, /any required check is NOT_RUN/);
   assert.match(preflight, /Noto Sans Devanagari/);
   assert.match(preflight, /Noto Sans Bengali/);
   assert.match(preflight, /Noto Sans Tamil/);
@@ -345,6 +344,242 @@ test("keeps every AI handoff valid and every artifact recommendation resolvable"
     for (const providerId of artifact.recommendedProviders) {
       assert.ok(providerIds.has(providerId), `${artifact.id} references missing provider ${providerId}`);
     }
+  }
+});
+
+test("compiles five flagship provider contracts with exact files and honest delivery evidence", async () => {
+  const [
+    { WORKFLOWS },
+    { STUDIO_RECIPES, AI_PROVIDERS },
+    { RECIPE_ARTIFACT_DEFAULTS, getArtifactProfile },
+    { buildTeacherPrompt },
+  ] = await Promise.all([
+    import("../app/prompt-data.ts"),
+    import("../app/studio-presets.ts"),
+    import("../app/artifact-data.ts"),
+    loadViteModule("/app/prompt-engine.ts"),
+  ]);
+
+  const cases = [
+    {
+      recipeId: "question-paper",
+      subject: "Biology",
+      topic: "Genetics and inheritance",
+      language: "Hindi + English",
+      outputForm: "Separate teacher and learner files",
+      expectedManifest: [
+        ["Student paper", "student-paper.pdf", "PDF", "Students", true],
+        ["Editable student master", "student-paper-editable.docx", "DOCX", "Teacher editing", true],
+        ["Teacher assessment pack", "teacher-assessment-pack.pdf", "PDF", "Teacher only", true],
+      ],
+      assessmentSpec: {
+        profileId: "balanced-academic",
+        profileLabel: "Balanced academic",
+        totalItems: 20,
+        totalMarks: 40,
+        reasoningMarkShare: 50,
+        rows: [
+          { label: "MCQ", count: 8, marksEach: 1, totalMarks: 8, purpose: "Precise concept checks" },
+          { label: "Short answer", count: 6, marksEach: 2, totalMarks: 12, purpose: "Explain and justify" },
+          { label: "Application", count: 4, marksEach: 3, totalMarks: 12, purpose: "Apply in context" },
+          { label: "Transfer", count: 2, marksEach: 4, totalMarks: 8, purpose: "Reason in an unfamiliar context" },
+        ],
+      },
+    },
+    {
+      recipeId: "daily-dpp",
+      subject: "Mathematics",
+      topic: "Quadratic equations",
+      language: "English",
+      outputForm: "Separate student practice, hints and teacher solutions",
+      expectedManifest: [
+        ["Student DPP", "student-dpp.pdf", "PDF", "Students", true],
+        ["Editable student DPP", "student-dpp-editable.docx", "DOCX", "Teacher editing", true],
+        ["Student hints ladder", "student-dpp-hints.pdf", "PDF", "Students after attempting", true],
+        ["DPP solutions and teacher notes", "dpp-solutions-teacher.pdf", "PDF", "Teacher only", true],
+      ],
+    },
+    {
+      recipeId: "theory-notes",
+      subject: "Physics",
+      topic: "Newton's laws of motion",
+      language: "English",
+      outputForm: "Student notes with a separate teacher verification guide",
+      expectedManifest: [
+        ["Student theory notes", "student-theory-notes.pdf", "PDF", "Students", true],
+        ["Editable theory notes", "theory-notes-editable.docx", "DOCX", "Teacher editing", true],
+        ["Theory notes verification guide", "theory-notes-teacher-verification.pdf", "PDF", "Teacher only", true],
+      ],
+    },
+    {
+      recipeId: "slide-deck",
+      subject: "Geography",
+      topic: "The Indian monsoon",
+      language: "English",
+      outputForm: "Ready-to-teach presentation and separate presenter guide",
+      expectedManifest: [
+        ["Teaching deck", "teaching-deck.pptx", "PPTX", "Classroom", true],
+        ["Presenter guide", "presenter-guide.pdf", "PDF", "Teacher only", true],
+      ],
+    },
+    {
+      recipeId: "interactive-simulation",
+      subject: "Physics",
+      topic: "Series and parallel circuits",
+      language: "English",
+      outputForm: "Runnable learner simulation and separate teacher guide",
+      expectedManifest: [
+        ["Interactive simulation", "interactive-simulation.html", "HTML", "Students", true],
+        ["Simulation teacher guide", "simulation-teacher-guide.pdf", "PDF", "Teacher only", true],
+      ],
+    },
+  ];
+
+  const compiled = new Map();
+  for (const auditCase of cases) {
+    const recipe = STUDIO_RECIPES.find((item) => item.id === auditCase.recipeId);
+    assert.ok(recipe, `missing recipe ${auditCase.recipeId}`);
+    const workflow = WORKFLOWS.find((item) => item.id === recipe.workflowId);
+    assert.ok(workflow, `missing workflow ${recipe.workflowId}`);
+    const artifactId = RECIPE_ARTIFACT_DEFAULTS[recipe.id];
+    assert.ok(artifactId, `missing artifact default for ${recipe.id}`);
+
+    const result = buildTeacherPrompt({
+      workflow,
+      recipeId: recipe.id,
+      recipeTitle: recipe.title,
+      artifact: getArtifactProfile(artifactId),
+      assessmentSpec: auditCase.assessmentSpec,
+      requiredOutputs: recipe.outputs,
+      visualStyle: "Scholarly university",
+      interactionMode: "Guided and classroom-safe",
+      creatorSignature: "Teacher Prompt Studio",
+      creatorMarker: "TPS-AUDIT",
+      subject: auditCase.subject,
+      customSubject: "",
+      level: "Secondary / high school",
+      customLevel: "",
+      topic: auditCase.topic,
+      curriculum: "CBSE / NCERT",
+      objective: recipe.objective,
+      learnerContext: "Anonymous Class 10 learners in an Indian school classroom",
+      priorKnowledge: "Relevant prerequisite ideas have been introduced once",
+      duration: "45 minutes",
+      modality: "Print and projector where relevant",
+      outputLanguage: auditCase.language,
+      tone: "Professional, clear and intellectually ambitious",
+      outputLength: "Complete classroom-ready artifact",
+      details: recipe.details,
+      sourceMaterial: "",
+      taskMaterial: "",
+      educatorRole: "Teacher",
+      teachingSetting: "School classroom",
+      countryRegion: "India",
+      pedagogyLens: "Evidence informed",
+      cognitiveDemand: "Application, reasoning and transfer",
+      successEvidence: "Learners can explain, apply and transfer the central idea",
+      resourceLimits: "Ordinary A4 printer, classroom projector and low-end shared phones",
+      mustAvoid: "No invented official claims, generic filler or learner-identifiable information",
+      powerMode: recipe.powerMode ?? "Expert",
+      collaborationStyle: "Proceed intelligently with stated assumptions",
+      outputForm: auditCase.outputForm,
+      addOns: recipe.addOns,
+    });
+
+    assert.deepEqual(
+      result.artifactManifest.map((file) => [
+        file.label,
+        file.filename,
+        file.format,
+        file.audience,
+        file.required,
+      ]),
+      auditCase.expectedManifest,
+      `${recipe.id} must compile its curated physical-file manifest exactly`,
+    );
+    assert.equal(
+      new Set(result.artifactManifest.map((file) => file.filename)).size,
+      result.artifactManifest.length,
+      `${recipe.id} filenames must be unique`,
+    );
+    assert.doesNotMatch(
+      result.prompt,
+      /Student artifact|Teacher guidance pack|student-artifact\.|teacher-guidance\./i,
+      `${recipe.id} must not fall back to generic synthesized file labels`,
+    );
+
+    assert.match(result.prompt, /real current-session (?:attachment|asset)|current-session asset/i);
+    assert.match(result.prompt, /provider-native artifact/i);
+    assert.match(result.prompt, /filename[^.\n]*in prose/i);
+    assert.match(result.prompt, /simulated (?:download )?(?:button|control)/i);
+    assert.match(result.prompt, /DELIVERY BLOCKED/i);
+    assert.match(result.prompt, /STATUS: FALLBACK/i);
+    assert.match(result.prompt, /never report STATUS: PASS when any required manifest format was replaced/i);
+    assert.match(result.prompt, /Never invent[^\n]*(?:link|path|file|viewer|QA)/i);
+    assert.match(result.prompt, /Never claim a check passed without observable evidence/i);
+    assert.match(result.prompt, /NOT_RUN is a failure/i);
+    assert.match(result.prompt, /actual VIEWER\/RUNTIME used/i);
+    assert.match(result.prompt, /Every (?:filename|value)[^\n]*action actually completed in this session/i);
+    assert.match(result.prompt, /No example receipt values are supplied/i);
+    assert.doesNotMatch(result.prompt, /Use numeric evidence such as:/i);
+    assert.doesNotMatch(result.prompt, /PRE-FLIGHT 14\/14 PASS/i);
+
+    const repair = result.refinements.find((item) => item.id === "audit-repair");
+    assert.ok(repair, `${recipe.id} must provide the audit-and-repair follow-up`);
+    assert.match(repair.prompt, /current-session attachment|current-session asset/i);
+    assert.match(repair.prompt, /provider-native artifact/i);
+    assert.match(repair.prompt, /filename[^.\n]*in prose/i);
+    assert.match(repair.prompt, /DELIVERY BLOCKED/i);
+    assert.match(repair.prompt, /Never invent[^\n]*(?:link|path|file|viewer|QA)/i);
+
+    compiled.set(recipe.id, result);
+  }
+
+  const slidePrompt = compiled.get("slide-deck").prompt;
+  assert.match(slidePrompt, /^Create: (?:Visual teaching slide deck|Classroom-ready teaching deck)\.$/m);
+  assert.match(slidePrompt, /complete classroom-ready presentation|finished teaching deck/i);
+  assert.doesNotMatch(slidePrompt, /^Create: .*outline\.$/im);
+  assert.doesNotMatch(slidePrompt, /^\d+\. (?:Deck story arc|Slide-by-slide plan|Visual directions)$/m);
+
+  const simulationPrompt = compiled.get("interactive-simulation").prompt;
+  for (const [label, contamination] of [
+    ["assessment blueprint", /ASSESSMENT BLUEPRINT —/i],
+    ["assessment validity gate", /G13_ASSESSMENT_VALIDITY/i],
+    ["student-paper architecture", /Student paper: title block/i],
+    ["assessment-only learner-file architecture", /Learner files may contain only title block/i],
+    ["MCQ terminology", /\bMCQs?\b|multiple-choice/i],
+  ]) {
+    assert.doesNotMatch(simulationPrompt, contamination, `simulation must not inherit ${label}`);
+  }
+  assert.match(simulationPrompt, /G15_INTERACTIVE_MATRIX/);
+  assert.match(simulationPrompt, /initial state.*minimum.*maximum.*invalid.*repeated.*reset/is);
+
+  const primaryProviders = AI_PROVIDERS.slice(0, 3);
+  assert.deepEqual(primaryProviders.map((provider) => provider.id), ["chatgpt", "claude", "gemini"]);
+  assert.deepEqual(primaryProviders.map((provider) => provider.url), [
+    "https://chatgpt.com/",
+    "https://claude.ai/new",
+    "https://gemini.google.com/app",
+  ]);
+  const handoffRoutes = cases.flatMap((auditCase) => primaryProviders.map((provider) => ({
+    recipeId: auditCase.recipeId,
+    providerId: provider.id,
+    url: provider.url,
+    prompt: compiled.get(auditCase.recipeId).prompt,
+  })));
+  assert.equal(handoffRoutes.length, 15, "five recipes × three providers must produce 15 honest handoff routes");
+  for (const provider of primaryProviders) {
+    assert.equal(handoffRoutes.filter((route) => route.providerId === provider.id).length, 5);
+  }
+  for (const auditCase of cases) {
+    assert.equal(handoffRoutes.filter((route) => route.recipeId === auditCase.recipeId).length, 3);
+  }
+  for (const route of handoffRoutes) {
+    const providerUrl = new URL(route.url);
+    assert.equal(providerUrl.protocol, "https:", `${route.recipeId}/${route.providerId} needs a secure launch URL`);
+    assert.ok(route.prompt.length > 1_000, `${route.recipeId}/${route.providerId} needs the complete compiled contract`);
+    assert.equal("status" in route, false, "a reachable route must not be mislabeled as a provider execution result");
+    assert.doesNotMatch(route.prompt, /(?:ChatGPT|Claude|Gemini) (?:passed|succeeded|returned|delivered)/i);
   }
 });
 

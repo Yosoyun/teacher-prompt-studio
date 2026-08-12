@@ -24,6 +24,11 @@ export type ArtifactFile = {
   mustExclude?: string[];
 };
 
+export type RecipeFileManifest = {
+  artifactId: ArtifactId;
+  files: ArtifactFile[];
+};
+
 export type ArtifactProfile = {
   id: ArtifactId;
   label: string;
@@ -140,7 +145,15 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
     canvas: "DOCX · real styles · reusable",
     formats: ["DOCX"],
     files: [
-      { label: "Editable master", format: "DOCX", audience: "Teacher", required: true },
+      {
+        label: "Editable master",
+        format: "DOCX",
+        audience: "Teacher editing",
+        required: true,
+        filename: "teaching-document-editable.docx",
+        contains: ["complete final content", "native heading and list styles", "editable tables and captions", "document metadata"],
+        mustExclude: ["prompt instructions", "fake headings", "tracked changes", "unfinished placeholders"],
+      },
     ],
     deliveryRules: [
       "Create and attach an actual editable DOCX using native heading, list, table, caption and page-break styles.",
@@ -148,7 +161,7 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
       "Set document title, subject, creator and accessibility properties in native metadata.",
     ],
     qualityGates: [
-      "Open the document structure mentally as an editor: headings must navigate, tables must reflow and page breaks must remain stable.",
+      "Open the actual exported DOCX in a compatible editor, navigate its headings, edit one representative paragraph, reflow its tables and complete a DOCX-to-PDF round trip.",
       "Reject fake headings, text-box-heavy layouts and decorative elements that make editing fragile.",
     ],
     recommendedProviders: ["chatgpt", "claude", "copilot"],
@@ -166,8 +179,24 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
     canvas: "16:9 · speaker notes · projector-safe",
     formats: ["PPTX", "PDF"],
     files: [
-      { label: "Teaching deck", format: "PPTX", audience: "Classroom", required: true },
-      { label: "Presenter handout", format: "PDF", audience: "Teacher", required: false },
+      {
+        label: "Teaching deck",
+        format: "PPTX",
+        audience: "Classroom",
+        required: true,
+        filename: "teaching-deck.pptx",
+        contains: ["complete editable slides", "implemented diagrams and reveals", "speaker notes", "accessible reading order"],
+        mustExclude: ["empty slide placeholders", "a prose-only slide plan", "design directions instead of implemented visuals", "prompt commentary"],
+      },
+      {
+        label: "Presenter handout",
+        format: "PDF",
+        audience: "Teacher",
+        required: false,
+        filename: "presenter-handout.pdf",
+        contains: ["slide thumbnails or references", "speaker notes", "interaction timing", "accessibility and projection check"],
+        mustExclude: ["unfinished slide notes", "learner-private data", "unsupported source claims"],
+      },
     ],
     deliveryRules: [
       "Create and attach a 16:9 PPTX with native editable elements, purposeful reveals, speaker notes and accessible reading order.",
@@ -178,7 +207,7 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
       "Check every slide from the back of a classroom: type, contrast, density and visual focus must remain clear.",
       "Reject repetitive title-and-bullets layouts and any slide that does not change learner thinking or action.",
     ],
-    recommendedProviders: ["chatgpt", "gemini", "copilot"],
+    recommendedProviders: ["chatgpt", "claude", "gemini", "copilot"],
     fallback: "Create a downloadable self-contained HTML slide deck with keyboard controls, print-to-PDF support and speaker notes.",
     interactive: true,
   },
@@ -275,19 +304,36 @@ export const ARTIFACT_PROFILES: ArtifactProfile[] = [
     canvas: "Live controls · reset · teacher mode",
     formats: ["HTML", "CSS", "JS"],
     files: [
-      { label: "Runnable simulation", format: "HTML", audience: "Students", required: true },
-      { label: "Teacher guide", format: "PDF", audience: "Teacher", required: false },
+      {
+        label: "Runnable simulation",
+        format: "HTML",
+        audience: "Students",
+        required: true,
+        filename: "interactive-simulation.html",
+        contains: ["embedded CSS and JavaScript", "meaningful keyboard-operable controls with visible focus", "visible model state and feedback", "reset and rigorous debrief", "responsive, reduced-motion, offline and print behavior"],
+        mustExclude: ["external runtime dependencies", "fake controls", "unfinished branches", "artifact source pasted as chat prose"],
+      },
+      {
+        label: "Teacher guide",
+        format: "PDF",
+        audience: "Teacher",
+        required: false,
+        filename: "simulation-teacher-guide.pdf",
+        contains: ["learning purpose", "facilitation moves", "model assumptions and limits", "tested-state matrix"],
+        mustExclude: ["fabricated test evidence", "learner-identifiable data", "unqualified real-world claims"],
+      },
     ],
     deliveryRules: [
       "Create a complete self-contained HTML simulation with instructions, meaningful controls, visible state, feedback, reset and a rigorous debrief.",
       "For branching scenarios, make consequences plausible, preserve state coherently and prevent dead ends; for models, expose assumptions and valid ranges.",
+      "Implement keyboard operation and visible focus for every control and mode, a prefers-reduced-motion path, responsive layouts at 320/768/1440 pixels, offline loading, zero-console-error behavior and an intentional print stylesheet or printable view.",
       "Include a teacher mode or guide with learning purpose, facilitation moves and interpretation boundaries.",
     ],
     qualityGates: [
       "Test minimum, maximum, invalid, repeated and reset states plus every decision branch.",
       "Reject fake interactivity, random consequences and controls whose movement does not change the model or learning evidence.",
     ],
-    recommendedProviders: ["claude", "aistudio", "chatgpt"],
+    recommendedProviders: ["claude", "chatgpt", "gemini", "aistudio"],
     fallback: "Return the fully runnable self-contained HTML simulation file; never replace it with a scenario description.",
     interactive: true,
   },
@@ -440,6 +486,135 @@ export const RECIPE_ARTIFACT_DEFAULTS: Record<string, ArtifactId> = {
   "learning-website": "interactive-website",
   "visual-flowchart": "flowchart-map",
   "brainstorm-lab": "brainstorm-canvas",
+};
+
+const worksheetBundleFiles =
+  ARTIFACT_PROFILES.find((profile) => profile.id === "worksheet-bundle")?.files ?? [];
+
+export const RECIPE_FILE_MANIFESTS: Partial<Record<string, RecipeFileManifest>> = {
+  "question-paper": {
+    artifactId: "worksheet-bundle",
+    files: worksheetBundleFiles,
+  },
+  "daily-dpp": {
+    artifactId: "worksheet-bundle",
+    files: [
+      {
+        label: "Student DPP",
+        format: "PDF",
+        audience: "Students",
+        required: true,
+        filename: "student-dpp.pdf",
+        contains: ["complete progressive problem set", "item IDs and working space", "difficulty progression", "transfer challenge"],
+        mustExclude: ["answers", "final-answer hints", "solutions", "difficulty map", "teacher notes", "QA commentary"],
+      },
+      {
+        label: "Editable student DPP",
+        format: "DOCX",
+        audience: "Teacher editing",
+        required: true,
+        filename: "student-dpp-editable.docx",
+        contains: ["exact editable learner DPP", "native styles and tables", "working-space layout", "accessible metadata"],
+        mustExclude: ["answers", "hints", "solutions", "teacher-only notes", "tracked changes"],
+      },
+      {
+        label: "Student hints ladder",
+        format: "PDF",
+        audience: "Students after attempting",
+        required: true,
+        filename: "student-dpp-hints.pdf",
+        contains: ["graduated hints keyed to every relevant item", "probe before cue", "partial method before final step", "clear stop points"],
+        mustExclude: ["complete final answers", "full worked solutions", "teacher diagnosis", "prompt commentary"],
+      },
+      {
+        label: "DPP solutions and teacher notes",
+        format: "PDF",
+        audience: "Teacher only",
+        required: true,
+        filename: "dpp-solutions-teacher.pdf",
+        contains: ["complete stepwise solutions", "accepted methods", "difficulty map", "misconception notes and transfer rationale"],
+        mustExclude: ["unfinished items", "dummy working", "unsupported official-pattern claims"],
+      },
+    ],
+  },
+  "theory-notes": {
+    artifactId: "editable-docx",
+    files: [
+      {
+        label: "Student theory notes",
+        format: "PDF",
+        audience: "Students",
+        required: true,
+        filename: "student-theory-notes.pdf",
+        contains: ["big ideas and learning map", "complete structured explanations", "worked example", "misconception contrasts and rapid recall"],
+        mustExclude: ["source ledger", "verification notes", "prompt commentary", "unfinished placeholders"],
+      },
+      {
+        label: "Editable theory notes",
+        format: "DOCX",
+        audience: "Teacher editing",
+        required: true,
+        filename: "theory-notes-editable.docx",
+        contains: ["exact editable student notes", "native headings, lists and tables", "editable diagrams or captions", "document metadata"],
+        mustExclude: ["tracked changes", "comments", "prompt instructions", "teacher-only verification notes"],
+      },
+      {
+        label: "Theory notes verification guide",
+        format: "PDF",
+        audience: "Teacher only",
+        required: true,
+        filename: "theory-notes-teacher-verification.pdf",
+        contains: ["source boundaries", "assumptions and local checks", "misconception rationale", "release evidence"],
+        mustExclude: ["invented citations", "unsupported curriculum claims", "learner-identifiable information"],
+      },
+    ],
+  },
+  "slide-deck": {
+    artifactId: "slide-deck",
+    files: [
+      {
+        label: "Teaching deck",
+        format: "PPTX",
+        audience: "Classroom",
+        required: true,
+        filename: "teaching-deck.pptx",
+        contains: ["complete editable 16:9 slides", "implemented subject-native visuals and reveals", "speaker notes", "retrieval and interaction moments"],
+        mustExclude: ["empty placeholders", "a prose-only slide outline", "design directions instead of built visuals", "prompt commentary"],
+      },
+      {
+        label: "Presenter guide",
+        format: "PDF",
+        audience: "Teacher only",
+        required: true,
+        filename: "presenter-guide.pdf",
+        contains: ["slide-by-slide facilitation notes", "timings and interaction cues", "answers where relevant", "projection and accessibility checks"],
+        mustExclude: ["unfinished notes", "unsupported sources", "learner-identifiable information"],
+      },
+    ],
+  },
+  "interactive-simulation": {
+    artifactId: "branching-simulation",
+    files: [
+      {
+        label: "Interactive simulation",
+        format: "HTML",
+        audience: "Students",
+        required: true,
+        filename: "interactive-simulation.html",
+        contains: ["embedded CSS and JavaScript", "meaningful keyboard-operable model controls with visible focus", "visible state and feedback", "reset, challenge and debrief", "responsive, reduced-motion, offline and print behavior"],
+        mustExclude: ["external runtime dependencies", "fake or decorative controls", "unfinished states", "ordinary chat explanation"],
+      },
+      {
+        label: "Simulation teacher guide",
+        format: "PDF",
+        audience: "Teacher only",
+        required: true,
+        filename: "simulation-teacher-guide.pdf",
+        contains: ["learning purpose", "facilitation sequence", "model assumptions and interpretation limits", "deterministic tested-state matrix"],
+        mustExclude: ["fabricated runtime evidence", "learner-identifiable data", "unqualified real-world claims"],
+      },
+    ],
+  },
 };
 
 export const WORKFLOW_ARTIFACT_DEFAULTS: Record<string, ArtifactId> = {

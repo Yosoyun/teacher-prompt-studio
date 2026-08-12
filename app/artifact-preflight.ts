@@ -48,13 +48,13 @@ export const LANGUAGE_FONT_PROFILES: LanguageFontProfile[] = [
 export const PREFLIGHT_GATES: PreflightGate[] = [
   {
     id: "G01_MANIFEST",
-    title: "Manifest and openability",
+    title: "Authentic manifest delivery and openability",
     appliesTo: ["global"],
     severity: "release-blocker",
-    passWhen: "every required file exists, has the promised format and reopens successfully",
-    rejectWhen: "a file is absent, corrupt, empty, mislabeled or cannot reopen",
-    repair: "rebuild the missing or invalid file and reopen it",
-    evidence: "required-file count plus opened-file count",
+    passWhen: "every required manifest entry is exposed in the current conversation as a real current-session attachment or provider-native downloadable artifact, has the exact filename, correct extension and MIME or file signature, contains non-zero substantive content and reopens successfully",
+    rejectWhen: "a file is absent, corrupt, empty, mislabeled or cannot reopen, or delivery is represented only by a prose filename, unsupported URL, invented path, simulated button, pasted source or future promise",
+    repair: "create a real current-session asset through a supported file or artifact tool, expose its working open/download action and reopen the exported result; otherwise report DELIVERY BLOCKED",
+    evidence: "exact delivered filenames, real asset/open actions, detected formats and exact opened filenames",
   },
   {
     id: "G02_COMPLETENESS",
@@ -111,7 +111,7 @@ export const PREFLIGHT_GATES: PreflightGate[] = [
     title: "Rendered-page inspection",
     appliesTo: ["global"],
     severity: "release-blocker",
-    passWhen: "every exported page, slide, screen and image state is inspected at 100% and 200%",
+    passWhen: "every exported page and slide plus every enumerated screen, viewport and deterministic interactive test state is inspected at normal and zoomed viewing sizes",
     rejectWhen: "text clips, overlaps, overflows or disappears; glyphs break; headings orphan; blank pages appear; or type becomes illegible",
     repair: "correct layout, re-export, reopen and inspect every rendered surface again",
     evidence: "rendered surfaces checked versus total surfaces",
@@ -161,10 +161,10 @@ export const PREFLIGHT_GATES: PreflightGate[] = [
     title: "Evidence-backed receipt",
     appliesTo: ["global"],
     severity: "release-blocker",
-    passWhen: "the receipt reports files opened, surfaces rendered, placeholder count, glyph result and audience-leak count",
-    rejectWhen: "any required check is NOT_RUN or the receipt claims success without observable check counts; NOT_RUN is a failure",
-    repair: "run the missing check; NOT_RUN is not a pass",
-    evidence: "compact PASS/FAIL table with numeric counts",
+    passWhen: "the receipt names exact delivered and opened filenames, the actual viewer or runtime used, rendered surfaces, measured placeholder and glyph/script results, audience-leak results and all applicable integrity totals",
+    rejectWhen: "any required check is NOT_RUN, a claimed file is not a real current-session asset, the named viewer/runtime was not actually used, or any link, path, file property, action, count or PASS result is invented or copied from an example",
+    repair: "run the missing check on the exported asset and report the observed result; if the check or delivery capability is unavailable, use FAIL, NOT_RUN or DELIVERY BLOCKED rather than a success claim",
+    evidence: "exact filenames, actual viewer/runtime names and measured PASS/FAIL results with no illustrative values",
   },
   {
     id: "G13_ASSESSMENT_VALIDITY",
@@ -181,10 +181,20 @@ export const PREFLIGHT_GATES: PreflightGate[] = [
     title: "Multilingual glyph and meaning parity",
     appliesTo: ["multilingual"],
     severity: "release-blocker",
-    passWhen: "all target-script text is searchable, correctly shaped, font-embedded and equivalent in command, constraint, numeral, unit, option and mark",
-    rejectWhen: "U+FFFD/�, □ tofu boxes, missing conjuncts, displaced matras, within-word font fallback, rasterized text or meaning drift appears",
-    repair: "apply the script font profile, normalize to NFC, re-export and repeat glyph plus equivalence checks",
-    evidence: "font names, embedded status, missing-glyph count and text round-trip result",
+    passWhen: "all target-script text is searchable, correctly shaped and font-embedded; the exact supplied canary survives source-to-export extraction as the same NFC code-point sequence; and commands, constraints, numerals, units, options and marks remain equivalent",
+    rejectWhen: "U+FFFD/�, tofu boxes, missing conjuncts, displaced matras, within-word fallback, rasterized text, meaning drift, a canary mismatch, or unexpected Latin/Latin-Extended characters embedded inside target-script words appears",
+    repair: "apply the named script font profile and complex-text shaping, normalize source and extracted text to NFC, remove script-substitution corruption, re-export and repeat exact canary, script-purity, extraction and equivalence checks",
+    evidence: "font names and embedded status, exact source/extracted canary comparison, code-point mismatch count, unexpected-script count and meaning-parity result",
+  },
+  {
+    id: "G15_INTERACTIVE_MATRIX",
+    title: "Deterministic interaction coverage",
+    appliesTo: ["interactive"],
+    severity: "release-blocker",
+    passWhen: "the exported artifact passes named tests for initial state, every branch or mode, minimum/maximum/invalid/repeated input, reset, keyboard-only use, reduced motion, offline load, print behavior where promised and 320/768/1440-pixel viewports with zero console errors",
+    rejectWhen: "a required case is omitted or NOT_RUN, a control is decorative or dead, state becomes incoherent, reset fails, keyboard focus is trapped, a viewport clips materially, an external runtime is required or any console error occurs",
+    repair: "repair the exported artifact, rerun the finite named matrix and report expected versus observed behavior for every case",
+    evidence: "case-by-case matrix, viewport results, offline result and console-error count",
   },
   {
     id: "F01_PDF",
@@ -194,7 +204,7 @@ export const PREFLIGHT_GATES: PreflightGate[] = [
     passWhen: "fonts are embedded, text is selectable, metadata language/title exists, pages are numbered and full-page rendering succeeds",
     rejectWhen: "fonts are missing, text is raster-only, extraction loses content, page sizes vary or grayscale becomes unreadable",
     repair: "export from an accessible source using Save/Export to PDF, not print-to-PDF, then rerun checks",
-    evidence: "font, extraction, metadata and render report",
+    evidence: "font and metadata report, extracted-text/source comparison and page-by-page render report",
   },
   {
     id: "F02_DOCX",
@@ -221,7 +231,7 @@ export const PREFLIGHT_GATES: PreflightGate[] = [
     title: "HTML runtime integrity",
     appliesTo: ["HTML"],
     severity: "release-blocker",
-    passWhen: "the self-contained file works offline at 320, 768 and 1440 pixels with keyboard, zoom and print support",
+    passWhen: "the self-contained exported file works offline at 320, 768 and 1440 pixels and passes the named initial, branch, boundary, repeated-input, reset, keyboard, reduced-motion, zoom and print cases with zero console errors",
     rejectWhen: "external dependencies, console errors, overflow, keyboard traps, dead branches, broken reset or network fonts exist",
     repair: "embed dependencies and repair responsive, keyboard, offline and print behavior",
     evidence: "viewport, keyboard, offline and console results",
@@ -253,7 +263,7 @@ export const ACADEMIC_EDITORIAL_RULES = [
   "Use one modular grid, an 8-point spacing rhythm, generous whitespace and a predominantly white or warm-white canvas with near-black text, neutral rules and one original muted academic accent.",
   "Use at most two type families: a scholarly serif for title or major headings and a highly legible sans serif for body, instructions, tables and labels. Avoid display gimmicks, outline, shadow, stretching, faux condensing and decorative 3-D styling.",
   "For A4 print, use 18–22 mm margins, title 22–26 pt, section headings 13–18 pt, body and questions 11–12 pt, metadata no smaller than 10.5 pt, and approximately 1.35–1.5 line spacing.",
-  "Left-align or use the natural reading direction; keep long text ragged-right, never fully justify it, and prevent orphan headings, split MCQs and isolated option lines.",
+  "Left-align or use the natural reading direction; keep long text ragged-right, never fully justify it, and prevent orphan headings, split content blocks, broken tables and isolated list rows.",
   "Use semantic heading levels, real lists and tables, captions, repeated table headers, logical reading order, page numbers and document language/title metadata.",
   "Use color only as a secondary cue. Preserve at least 4.5:1 contrast for normal text and ensure grayscale or low-ink output retains the hierarchy.",
 ];
@@ -276,7 +286,9 @@ const contextsFor = (
   const contexts = new Set<PreflightContext>(["global"]);
   if (assessment) contexts.add("assessment");
   if (outputLanguage.trim().toLowerCase() !== "english") contexts.add("multilingual");
-  if (artifact.interactive) contexts.add("interactive");
+  if (["interactive-website", "branching-simulation"].includes(artifact.id)) {
+    contexts.add("interactive");
+  }
   for (const file of files) {
     const format = file.format.toUpperCase() as PreflightContext;
     contexts.add(format);
@@ -322,8 +334,9 @@ export function compileLanguageProductionRules(outputLanguage: string) {
 
   return profiles.flatMap((profile) => [
     `${profile.language}: set language metadata to ${profile.bcp47}; use ${profile.headingFont} for headings and ${profile.bodyFont} for body; verify this canary after export: “${profile.canary}”.`,
-    `Normalize ${profile.script} text to NFC, use a complex-text shaping engine, embed or subset fonts, preserve searchable text, and reject U+FFFD, tofu squares, missing conjuncts, displaced marks or within-word font fallback.`,
+    `Normalize both source and exported ${profile.script} text to NFC, use a complex-text shaping engine, embed or subset fonts, preserve searchable text, then extract the exported canary and require an exact code-point-for-code-point match with “${profile.canary}”.`,
+    `Run a script-purity scan on extracted ${profile.script} words. Reject U+FFFD, tofu squares, missing conjuncts, displaced marks, within-word font fallback and unexpected Latin or Latin-Extended letters embedded inside target-script words. Visual resemblance is not a pass.`,
     "For self-contained HTML, embed open-licensed WOFF2 font data; do not depend on a network font. For DOCX or PPTX, set complex-script fonts explicitly and pass a PDF export check.",
-    "Round-trip extracted text against source and compare command verbs, negation, qualifiers, numerals, units, options and marks—not only general meaning. Never transliterate unless requested.",
+    "Round-trip all extracted text against source and compare command verbs, negation, qualifiers, numerals, units, options and marks—not only general meaning. If a target binary cannot preserve this exactly, expose and validate the real self-contained HTML fallback or report DELIVERY BLOCKED; never release corrupted text with a PASS receipt. Never transliterate unless requested.",
   ]);
 }

@@ -36,6 +36,12 @@ roadmap capability, not a current product claim.
 Investor-readiness materials live in [`docs/investor`](docs/investor/). They
 separate shipped facts from hypotheses, pilot targets and unknowns.
 
+The evidence-bounded [15-cell provider-output audit](docs/provider-audit/PROVIDER_OUTPUT_AUDIT_2026-08-12.md)
+records what ChatGPT, Claude and Gemini did—or could not be verified doing—for
+Question Paper, DPP, Theory Notes, Slide Deck and Simulation. It keeps live-file
+evidence separate from prompt-contract tests and never treats a provider's own
+QA receipt as proof.
+
 ## Product principles
 
 - A missing topic never silently becomes “full syllabus.”

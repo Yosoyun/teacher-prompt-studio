@@ -288,6 +288,7 @@ export default function PromptStudio() {
     () => ({
       workflow: selectedWorkflow,
       recipeId: selectedRecipeId,
+      recipeTitle: selectedRecipe?.title ?? selectedWorkflow.title,
       artifact,
       assessmentSpec,
       requiredOutputs: selectedRecipe?.outputs ?? selectedWorkflow.outputSections,

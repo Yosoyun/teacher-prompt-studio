@@ -396,20 +396,20 @@ export const STUDIO_RECIPES: StudioRecipe[] = [
   },
   {
     id: "slide-deck",
-    title: "Visual teaching slide deck",
+    title: "Classroom-ready teaching deck",
     shortTitle: "Slide deck",
     glyph: "SL",
     category: "Create",
     workflowId: "slide-outline",
-    summary: "A reveal-by-reveal deck with interaction, not walls of text.",
+    summary: "A finished, editable presentation with built visuals, reveals and learner interaction.",
     explanation:
-      "Gives each slide one job and inserts questions, pauses and visual directions at the right moments.",
+      "Produces the presentation teachers can open and teach from, with each slide built for projection and purposeful learner participation.",
     objective:
-      "Create a visually guided teaching deck outline that supports explanation and active learner thinking.",
+      "Create and attach a complete, classroom-ready presentation that supports clear explanation and active learner thinking.",
     details:
-      "Use one idea per slide, concise copy, explicit visual directions, teacher narration cues and regular learner interactions.",
+      "Build every slide as finished content: use one idea per slide, concise copy, implemented visuals and reveals, speaker notes and regular learner interactions. Never substitute an outline, storyboard or prose plan for the presentation.",
     addOns: ["examples", "accessibility", "time", "misconceptions"],
-    outputs: ["Deck story arc", "Slide-by-slide plan", "Visual directions", "Speaker cues", "Interaction moments"],
+    outputs: ["Teaching deck", "Editable slides", "Speaker notes", "Built interaction moments", "Accessibility and projection check"],
     timeSaved: "90 min",
     accent: "violet",
     powerMode: "Breakthrough",

@@ -12,9 +12,9 @@ This draft is intentionally conservative. Replace every **[UNKNOWN]** only with 
 
 ## What does the company make?
 
-Teacher Prompt Studio helps Indian secondary and coaching teachers create assessment artifacts without writing prompts. A teacher chooses a job such as a question paper or DPP, sets class, board, topic, language and file requirements, then opens a chosen external AI with a rigorous production brief already copied.
+Teacher Prompt Studio helps Indian secondary and coaching teachers create assessment artifacts without writing prompts. A teacher chooses a material, adds board, class or stage, subject, language and topic, reviews the preselected files, then opens a chosen external AI with the production brief copied.
 
-The current product is a provider-flexible compiler and handoff layer. The external AI generates the final file. Teachers can record whether the result was usable, needed repair or returned text only, and can reuse a successful setup on the same device.
+The current product is a provider-flexible compiler and handoff layer. The external AI generates the final file. After the AI opens, teachers can copy exact repair, visual, accessibility and depth instructions into the same chat without rebuilding the task.
 
 Our vision is to become the provider-agnostic production and independent verification layer for classroom artifacts.
 
@@ -28,11 +28,11 @@ The Ministry of Education's UDISE+ 2025–26 release reports 10,273,020 teachers
 
 **[SHIPPED]**
 
-- A deployed static four-step web app.
+- A deployed static three-step web app.
 - 79 structured workflows, including 29 tap-first recipes.
 - 12 artifact types and 7 external AI handoffs.
 - Assessment blueprint logic, physical student/teacher file separation, multilingual production requirements, source safeguards and repair prompts.
-- A browser-local impact ledger that records teacher-confirmed outcomes and supports reuse.
+- Device-local classroom preferences and exact same-chat improvement instructions.
 
 **Not shipped:** generation inside Teacher Prompt Studio, ingestion of returned files, independent artifact validation, cloud accounts, team workspaces, billing or institution administration.
 
@@ -46,7 +46,7 @@ Do not infer this from repository history without founder confirmation.
 
 **[UNKNOWN — no verified active-user data supplied].**
 
-The current product keeps its impact ledger on each device and does not expose global product analytics. Device-local counts cannot be presented as company-wide traction.
+The current product does not expose company-wide product analytics. No usage count should be presented as company-wide traction without a separate, verified measurement system.
 
 ## Do you have revenue?
 
@@ -62,7 +62,7 @@ We encode the classroom job, artifact manifest and quality gates before the mode
 
 ## Why is this different from ChatGPT, Claude, Gemini or Canva?
 
-Those products are execution tools or general creation surfaces. Teacher Prompt Studio is intended to preserve a teacher-specific workflow across providers: board/class context, assessment architecture, artifact manifest, privacy boundary, quality checks, repair history and approved reuse.
+Those products are execution tools or general creation surfaces. Teacher Prompt Studio is intended to preserve a teacher-specific workflow across providers: board/class context, assessment architecture, artifact manifest, privacy boundary, quality checks, repair history and approved reuse. Today it preserves classroom context through the handoff and supplies same-chat follow-ups; repair history and approved reuse are roadmap.
 
 Today, our differentiation is workflow depth and a comfortable provider-flexible handoff. That alone is not a durable moat. Our planned moat is measured provider capability, deterministic artifact validation, accepted repair sequences and institution-approved template lineage.
 

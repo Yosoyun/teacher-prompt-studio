@@ -33,16 +33,16 @@ This combines return behaviour with a classroom outcome. “Prompt copied,” �
 | --- | --- | --- | --- | --- |
 | Recruited teachers | Consented participants who complete onboarding | **[BASELINE UNKNOWN]** | 30 | Pilot roster |
 | Organisations represented | Distinct department/coaching cohorts | **[BASELINE UNKNOWN]** | At least 3 | Pilot roster |
-| Seven-day activation | Enrolled teachers who prepare a handoff and rate its result within 7 days | **[BASELINE UNKNOWN]** | At least 70% | Device summary + dated check-in |
+| Seven-day activation | Enrolled teachers who prepare a handoff and rate its result within 7 days | **[BASELINE UNKNOWN]** | At least 70% | Facilitated observation + dated pilot check-in |
 | Median time to first handoff | Minutes from first studio open to a prepared external-AI handoff | **[BASELINE UNKNOWN]** | 10 minutes or less | Facilitated observation or consented event log |
 | Median time to usable artifact | Minutes from first studio open to a teacher-confirmed usable file, among successful rated handoffs | **[BASELINE UNKNOWN]** | 30 minutes or less | Observation, timestamps and check-in |
-| Result-rating completion | Prepared handoffs rated usable, repair or text-only within 24 hours | **[BASELINE UNKNOWN]** | At least 60% | Device-local ledger export |
-| Teacher-confirmed usable-file rate | Usable ratings divided by all rated handoffs | **[BASELINE UNKNOWN]** | At least 70% | Device-local ledger export |
-| Text-only failure rate | Text-only ratings divided by all rated handoffs | **[BASELINE UNKNOWN]** | 10% or less | Device-local ledger export |
+| Result-rating completion | Prepared handoffs rated usable, repair or text-only within 24 hours | **[BASELINE UNKNOWN]** | At least 60% | Consented pilot check-in log |
+| Teacher-confirmed usable-file rate | Usable ratings divided by all rated handoffs | **[BASELINE UNKNOWN]** | At least 70% | Consented pilot check-in log |
+| Text-only failure rate | Text-only ratings divided by all rated handoffs | **[BASELINE UNKNOWN]** | 10% or less | Consented pilot check-in log |
 | Week-4 creator retention | Activated teachers with a rated build in week 4 | **[BASELINE UNKNOWN]** | At least 40% | Cohort sheet |
 | Week-12 creator retention | Activated teachers with a rated build in week 12 | **[BASELINE UNKNOWN]** | At least 30% | Cohort sheet |
 | Retained-teacher frequency | Median rated handoffs per retained teacher per week during weeks 9–12 | **[BASELINE UNKNOWN]** | At least 2 | Cohort sheet |
-| Setup reuse | Activated teachers who use a saved setup again by week 12 | **[BASELINE UNKNOWN]** | At least 30% | Device-local ledger + interview |
+| Classroom-profile reuse | Activated teachers whose saved classroom preferences reduce setup work on a later build | **[BASELINE UNKNOWN]** | At least 30% | Observation + pilot interview |
 | Independent quality sample | Anonymised returned artifact bundles reviewed against the release rubric | **[BASELINE UNKNOWN]** | At least 30 bundles | Review log |
 | Major-failure-free audit rate | Reviewed bundles without wrong totals, missing required files, answer leakage, placeholders or unusable rendering | **[BASELINE UNKNOWN]** | At least 80% | Review log |
 | Referral behaviour | Activated teachers who invite or share a setup with another teacher | **[BASELINE UNKNOWN]** | At least 20% | Referral log/interview |
@@ -101,7 +101,7 @@ The current product instructs the external AI to perform many of these checks. D
 ## Data collection rules
 
 - Source material, learner responses and full prompts are excluded from the scorecard.
-- The browser ledger remains local unless a participant explicitly copies and shares its anonymised summary.
+- Classroom preferences remain device-local; outcome ratings are collected only through a separate consented pilot log.
 - A teacher-confirmed rating must never be described as independent validation.
 - Every aggregate must state numerator, denominator, date range and missing-data count.
 - Segment results by workflow, provider and organisation type before combining them.

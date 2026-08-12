@@ -75,8 +75,22 @@ test("server-renders the teacher prompt studio", async () => {
   assert.match(html, /See more teaching materials/);
   assert.match(html, /finished PDF, DOCX, slides, image or website files/);
   assert.match(html, /class-10-quadratics-student-bilingual\.pdf/);
-  assert.doesNotMatch(html, /private proof loop|pilot snapshot|not live-user traction/i);
+  assert.doesNotMatch(html, /My impact|impact ledger|usable-file rate|private proof loop|pilot snapshot|not live-user traction/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+});
+
+test("keeps GitHub Pages metadata aligned with the three-step product", async () => {
+  const [pagesIndex, readme] = await Promise.all([
+    readFile(new URL("../github-pages/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pagesIndex, /Create classroom-ready files with AI/);
+  assert.match(pagesIndex, /simple three-step maker for Indian teachers/i);
+  assert.match(pagesIndex, /og-studio-v2\.png/);
+  assert.doesNotMatch(pagesIndex, /four-step|private proof loop|og-beast\.png/i);
+  assert.match(readme, /focused\s+three-step flow/i);
+  assert.doesNotMatch(readme, /four-step maker|device-local impact ledger/i);
 });
 
 test("keeps the prompt library broad while the primary flow stays simple", async () => {
@@ -185,7 +199,7 @@ test("keeps the prompt library broad while the primary flow stays simple", async
   assert.match(page, /launchWindow\.location\.replace\(provider\.url\)/);
   assert.match(page, /launchWindow\?\.close\(\)/);
   assert.match(page, /After copying, open \{manualProvider\.name\}/);
-  assert.doesNotMatch(page, /recordImpactPrepared|markImpactOutcome/);
+  assert.doesNotMatch(page, /My impact|impact ledger|usable-file rate|private proof loop|recordImpactPrepared|markImpactOutcome/i);
   assert.doesNotMatch(page, /onClick=\{\(\) => void prepareProvider\(provider\.id\)\}/);
   const reserveTab = page.indexOf('window.open("about:blank", "_blank")');
   const copyInstructions = page.indexOf("await copyText(current.prompt)", reserveTab);
@@ -332,95 +346,6 @@ test("keeps every AI handoff valid and every artifact recommendation resolvable"
       assert.ok(providerIds.has(providerId), `${artifact.id} references missing provider ${providerId}`);
     }
   }
-});
-
-test("parses, updates and summarizes the device-local impact ledger deterministically", async () => {
-  const {
-    IMPACT_LEDGER_LIMIT,
-    createImpactEntry,
-    formatPilotSummary,
-    parseImpactLedger,
-    setImpactOutcome,
-    summarizeImpact,
-  } = await import("../app/impact-ledger.ts");
-
-  const snapshot = (workflowId) => ({
-    recipeId: `${workflowId}-recipe`,
-    workflowId,
-    artifactId: "worksheet-bundle",
-    providerId: "chatgpt",
-    boardId: "cbse",
-    grade: 10,
-    audienceMode: "school",
-    classSize: 40,
-    subject: "Mathematics",
-    level: "Secondary / high school",
-    topic: "Quadratic equations",
-    outputLanguage: "English",
-    timeIndex: 3,
-    difficultyIndex: 1,
-    questionCount: 20,
-    finishId: "polished",
-    visualStyleId: "academic-editorial",
-    assessmentProfileId: "balanced-academic",
-    addOns: ["answers"],
-  });
-  const create = (id, createdAt, workflowId) => createImpactEntry({
-    mission: `${workflowId} mission`,
-    artifactLabel: "PDF + DOCX bundle",
-    providerName: "ChatGPT",
-    classLabel: "Class 10",
-    boardLabel: "CBSE / NCERT",
-    subject: "Mathematics",
-    language: "English",
-    timeSaved: "2 hours",
-    snapshot: snapshot(workflowId),
-  }, new Date(createdAt), id);
-
-  const usable = create("usable", "2026-07-19T10:00:00.000Z", "quiz-test");
-  const repair = create("repair", "2026-07-18T10:00:00.000Z", "worksheet-homework");
-  const textOnly = create("text-only", "2026-05-01T10:00:00.000Z", "question-bank");
-  const awaiting = create("awaiting", "2026-07-17T10:00:00.000Z", "quiz-test");
-
-  let entries = [repair, textOnly, usable, awaiting];
-  entries = setImpactOutcome(entries, "usable", "usable", new Date("2026-07-19T11:00:00.000Z"));
-  entries = setImpactOutcome(entries, "repair", "repair", new Date("2026-07-18T11:00:00.000Z"));
-  entries = setImpactOutcome(entries, "text-only", "text-only", new Date("2026-05-01T11:00:00.000Z"));
-
-  assert.equal(entries.find((entry) => entry.id === "usable")?.outcome, "usable");
-  assert.equal(entries.find((entry) => entry.id === "usable")?.updatedAt, "2026-07-19T11:00:00.000Z");
-  assert.equal(entries.find((entry) => entry.id === "awaiting")?.outcome, "prepared");
-
-  const parsed = parseImpactLedger(JSON.stringify([
-    { id: "invalid-entry" },
-    ...entries,
-  ]));
-  assert.deepEqual(parsed.map((entry) => entry.id), ["usable", "repair", "awaiting", "text-only"]);
-  assert.deepEqual(parseImpactLedger("not-json"), []);
-  assert.deepEqual(parseImpactLedger(JSON.stringify({ entries })), []);
-
-  const oversizedLedger = Array.from({ length: IMPACT_LEDGER_LIMIT + 5 }, (_, index) =>
-    create(`bulk-${index}`, new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(), "quiz-test"));
-  const limited = parseImpactLedger(JSON.stringify(oversizedLedger));
-  assert.equal(limited.length, IMPACT_LEDGER_LIMIT);
-  assert.equal(limited[0].id, `bulk-${IMPACT_LEDGER_LIMIT + 4}`);
-
-  const now = new Date("2026-07-20T10:00:00.000Z");
-  const summary = summarizeImpact(parsed, now);
-  assert.deepEqual(summary, {
-    totalPrepared: 4,
-    confirmedUsable: 1,
-    needsRepair: 1,
-    textOnly: 1,
-    rated: 3,
-    successRate: 33,
-    uniqueWorkflows: 3,
-    preparedLast30Days: 3,
-  });
-  const pilotSummary = formatPilotSummary(summary, now);
-  assert.match(pilotSummary, /Usable-file rate among rated handoffs: 33%/);
-  assert.match(pilotSummary, /anonymised, device-local activity record/);
-  assert.match(pilotSummary, /not a global usage or revenue metric/);
 });
 
 test("blocks identifiable learner data as an error before any external handoff", async () => {
